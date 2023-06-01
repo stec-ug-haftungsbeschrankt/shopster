@@ -26,9 +26,9 @@ struct DatabaseSelector {
 }
 
 impl DatabaseSelector {
-    fn new(tenant_database_url: String) -> Self {      
+    fn new(tenet: Tenet) -> Self {      
         DatabaseSelector {
-            tenants: Tenet::new(tenant_database_url),
+            tenants: tenet,
             database_cache: HashMap::new()
         }
     }
@@ -56,14 +56,32 @@ impl DatabaseSelector {
 }
 
 
+struct Shopster {
+    database_selector: DatabaseSelector
+}
+
+impl Shopster {
+    pub fn new(database_selector: DatabaseSelector) -> Self {
+        Shopster { database_selector }
+    }
+
+    
+}
+
+
+
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     use crate::DatabaseSelector;
     use crate::Uuid;
     
     #[test]
     fn tenant_not_found_test() {
-        let mut database_selector = DatabaseSelector::new("TestString".to_string());
+        let tenant_database_url = "postgres://postgres:@localhost/stec_tenet".to_string();
+        let tenet = Tenet::new(tenant_database_url);
+        let mut database_selector = DatabaseSelector::new(tenet);
         database_selector.get_storage_for_tenant(Uuid::new_v4());
     }
     
