@@ -524,6 +524,13 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "diesel",
+ "diesel_migrations",
+ "log",
+ "r2d2",
+ "serde",
+ "serde_derive",
+ "serde_json",
+ "simple_logger",
  "tenet",
  "thiserror",
  "uuid",
