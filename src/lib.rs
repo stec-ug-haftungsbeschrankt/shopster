@@ -9,6 +9,7 @@ mod orders;
 mod settings;
 
 use diesel::PgConnection;
+use diesel::connection;
 use diesel::r2d2;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::EmbeddedMigrations;
@@ -32,6 +33,7 @@ pub type DbConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
+const DATABASE_AQUISITION_ERROR: &str = "Unable to quire Database";
 
 #[derive(Debug)]
 struct DatabaseSelector {
@@ -76,6 +78,13 @@ impl DatabaseSelector {
 }
 
 static DATABASE_SELECTOR: OnceLock<Mutex<DatabaseSelector>> = OnceLock::new();
+
+fn aquire_database(tenant_id: Uuid) -> Result<DbConnection, ShopsterError> {
+    let mut database_selector = DATABASE_SELECTOR.get().expect(DATABASE_AQUISITION_ERROR).lock().unwrap();
+    let pool = database_selector.get_storage_for_tenant(tenant_id)?;
+    let mut connection = pool.get()?;
+    Ok(connection)
+}
 
 
 struct Shopster { }

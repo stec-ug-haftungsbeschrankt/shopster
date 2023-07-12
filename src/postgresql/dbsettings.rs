@@ -1,7 +1,6 @@
 use crate::ShopsterError;
 use crate::schema::settings;
-use crate::DbConnection;
-use crate::DATABASE_SELECTOR;
+use crate::aquire_database;
 
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -24,53 +23,63 @@ pub struct DbSetting {
 
 impl DbSetting {
 
-    pub fn find(connection: &mut DbConnection, id: i32) -> Result<Self, ShopsterError> {
-        let settings = settings::table.filter(settings::id.eq(id)).first(connection)?;
+    pub fn find(tenant_id: Uuid, id: i32) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
+        let settings = settings::table.filter(settings::id.eq(id)).first(&mut connection)?;
         Ok(settings)
     }
 
-    pub fn find_by_title(connection: &mut DbConnection, title: String) -> Result<Self, ShopsterError> {
-        let settings = settings::table.filter(settings::title.eq(title)).first(connection)?;
+    pub fn find_by_title(tenant_id: Uuid, title: String) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
+        let settings = settings::table.filter(settings::title.eq(title)).first(&mut connection)?;
         Ok(settings)
     }
 
     pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        //let mut connection = database::connection()?;
-        let mut database_selector = DATABASE_SELECTOR.get().expect("Test").lock().unwrap();
-        let pool = database_selector.get_storage_for_tenant(tenant_id)?;
-        let mut connection = pool.get()?;
+        let mut connection = aquire_database(tenant_id)?;
+        
         let settings = settings::table.load(&mut connection)?;
         Ok(settings)
     }
 
-    pub fn create(connection: &mut DbConnection, settings: DbSetting) -> Result<Self, ShopsterError> {
+    pub fn create(tenant_id: Uuid, settings: DbSetting) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let db_settings = diesel::insert_into(settings::table)
             .values(settings)
-            .get_result(connection)?;
+            .get_result(&mut connection)?;
         Ok(db_settings)
     }
 
-    pub fn update(connection: &mut DbConnection, id: i32, settings: DbSetting) -> Result<Self, ShopsterError> {
+    pub fn update(tenant_id: Uuid, id: i32, settings: DbSetting) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let db_settings = diesel::update(settings::table)
             .filter(settings::id.eq(id))
             .set(settings)
-            .get_result(connection)?;
+            .get_result(&mut connection)?;
         Ok(db_settings)
     }
 
-    pub fn delete(connection: &mut DbConnection, id: i32) -> Result<usize, ShopsterError> {
+    pub fn delete(tenant_id: Uuid, id: i32) -> Result<usize, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let res = diesel::delete(
                 settings::table.filter(settings::id.eq(id))
             )
-            .execute(connection)?;
+            .execute(&mut connection)?;
         Ok(res)
     }
 
-    pub fn delete_by_title(connection: &mut DbConnection, title: &str) -> Result<usize, ShopsterError> {
+    pub fn delete_by_title(tenant_id: Uuid, title: &str) -> Result<usize, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let res = diesel::delete(
                 settings::table.filter(settings::title.eq(title))
             )
-            .execute(connection)?;
+            .execute(&mut connection)?;
         Ok(res)
     }
 }
