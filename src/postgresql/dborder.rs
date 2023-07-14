@@ -11,12 +11,13 @@ use diesel::expression::AsExpression;
 use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{self, IsNull, Output, ToSql};
 use std::io::Write;
+use uuid::Uuid;
 
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::DbConnection;
+use crate::aquire_database;
 
-#[derive(Debug, AsExpression, FromSqlRow, Serialize, Deserialize, PartialEq, PartialOrd, Clone)]
+#[derive(Debug, AsExpression, FromSqlRow, Serialize, Deserialize, PartialEq, PartialOrd, Copy, Clone)]
 #[diesel(sql_type = crate::schema::sql_types::Orderstatus)]
 pub enum OrderStatus {
     New,
@@ -115,40 +116,50 @@ impl From<&DbOrder> for InsertableDbOrder {
 
 impl DbOrder {
 
-    pub fn find(connection: &mut DbConnection, id: i64) -> Result<Self, ShopsterError> {
+    pub fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let order = orders::table
             .filter(orders::id.eq(id))
-            .first(connection)?;
+            .first(&mut connection)?;
         Ok(order)
     }
 
-    pub fn get_all(connection: &mut DbConnection) -> Result<Vec<Self>, ShopsterError> {
-        let orders = orders::table.load(connection)?;
+    pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
+        let orders = orders::table.load(&mut connection)?;
         Ok(orders)
     }
 
-    pub fn create(connection: &mut DbConnection, order: DbOrder) -> Result<Self, ShopsterError> {
+    pub fn create(tenant_id: Uuid, order: DbOrder) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let insertable = InsertableDbOrder::from(&order);
         let db_order = diesel::insert_into(orders::table)
             .values(insertable)
-            .get_result(connection)?;
+            .get_result(&mut connection)?;
         Ok(db_order)
     }
 
-    pub fn update(connection: &mut DbConnection, id: i64, order: DbOrder) -> Result<Self, ShopsterError> {
+    pub fn update(tenant_id: Uuid, id: i64, order: DbOrder) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let db_order = diesel::update(orders::table)
             .filter(orders::id.eq(id))
             .set(order)
-            .get_result(connection)?;
+            .get_result(&mut connection)?;
         Ok(db_order)
     }
 
-    pub fn delete(connection: &mut DbConnection, id: i64) -> Result<usize, ShopsterError> {
+    pub fn delete(tenant_id: Uuid, id: i64) -> Result<usize, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let res = diesel::delete(
                 orders::table
                     .filter(orders::id.eq(id))
             )
-            .execute(connection)?;
+            .execute(&mut connection)?;
         Ok(res)
     }
 }
