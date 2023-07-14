@@ -1,5 +1,5 @@
 
-use crate::{DbConnection, error::ShopsterError};
+use crate::error::ShopsterError;
 use crate::postgresql::dbproduct::DbProduct;
 use chrono::{NaiveDateTime, Utc};
 use uuid::Uuid;
@@ -104,30 +104,17 @@ impl Products {
         let reply = Product::from(&created_product);
         Ok(reply)
     }
-}
-
-
-/*
-    async fn update(&self, request: Request<Product>) -> Result<Response<Product>, Status> {
-        let product = request.into_inner();
-
+    
+    pub fn update(&self, product: Product) -> Result<Product, ShopsterError> {
         let db_product = DbProduct::from(&product);
-        let updated_product = DbProduct::update(product.id, db_product)
-            .map_err(|e| Status::aborted(e.to_string()))?;
+        let updated_product = DbProduct::update(self.tenant_id, product.id, db_product)?;
 
         let reply = Product::from(&updated_product);
-        Ok(Response::new(reply))
+        Ok(reply)
     }
-
-    async fn remove(&self, request: Request<ProductRequest>) -> Result<Response<ProductReply>, Status> {
-        let product_request = request.into_inner();
-        let _result = DbProduct::delete(product_request.id)
-            .map_err(|e| Status::aborted(e.to_string()))?;
-        let reply = ProductReply {
-            id: product_request.id,
-            success: true
-        };
-        Ok(Response::new(reply))
+    
+    pub fn remove(&self, product_id: i64) -> Result<bool, ShopsterError> {
+        let result = DbProduct::delete(self.tenant_id, product_id)?;
+        Ok(result > 0)
     }
 }
-*/

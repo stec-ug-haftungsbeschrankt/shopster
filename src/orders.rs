@@ -1,4 +1,3 @@
-use crate::DbConnection;
 use uuid::Uuid;
 
 pub struct Orders { 

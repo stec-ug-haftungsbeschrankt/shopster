@@ -58,19 +58,13 @@ impl Settings {
         Ok(Setting::from(&created_setting))
     }
 
-    pub fn update_by_id(&self, id: Uuid, value: String) -> Setting {
-        todo!()
-        
-        /*
-        let setting = request.into_inner();
-
-        let db_setting = DbSetting::from(&setting);
-        let updated_setting = DbSetting::update(setting.id, db_setting)
-            .map_err(|e| Status::aborted(e.to_string()))?;
+    pub fn update_by_id(&self, id: i32, value: String) -> Result<Setting, ShopsterError> {
+        let mut db_setting = DbSetting::find(self.tenant_id, id)?;
+        db_setting.value = value;
+        let updated_setting = DbSetting::update(self.tenant_id, id, db_setting)?;
 
         let reply = Setting::from(&updated_setting);
-        Ok(Response::new(reply))     
-        */
+        Ok(reply)     
     }
         
     pub fn delete_by_id(&self, id: i32) -> Result<bool, ShopsterError> {

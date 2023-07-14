@@ -9,7 +9,6 @@ use diesel::prelude::*;
 use uuid::Uuid;
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::DbConnection;
 use crate::aquire_database;
 
 

@@ -4,12 +4,11 @@ extern crate diesel;
 mod postgresql;
 mod error;
 mod schema;
-mod products;
-mod orders;
-mod settings;
+pub mod products;
+pub mod orders;
+pub mod settings;
 
 use diesel::PgConnection;
-use diesel::connection;
 use diesel::r2d2;
 use diesel::r2d2::ConnectionManager;
 use diesel_migrations::EmbeddedMigrations;
@@ -36,13 +35,13 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 const DATABASE_AQUISITION_ERROR: &str = "Unable to quire Database";
 
 #[derive(Debug)]
-struct DatabaseSelector {
+pub struct DatabaseSelector {
     tenants: Tenet,
     database_cache: HashMap<Uuid, Pool>
 }
 
 impl DatabaseSelector {
-    fn new(tenet: Tenet) -> Self {      
+    pub fn new(tenet: Tenet) -> Self {      
         DatabaseSelector {
             tenants: tenet,
             database_cache: HashMap::new()
@@ -82,12 +81,12 @@ static DATABASE_SELECTOR: OnceLock<Mutex<DatabaseSelector>> = OnceLock::new();
 fn aquire_database(tenant_id: Uuid) -> Result<DbConnection, ShopsterError> {
     let mut database_selector = DATABASE_SELECTOR.get().expect(DATABASE_AQUISITION_ERROR).lock().unwrap();
     let pool = database_selector.get_storage_for_tenant(tenant_id)?;
-    let mut connection = pool.get()?;
+    let connection = pool.get()?;
     Ok(connection)
 }
 
 
-struct Shopster { }
+pub struct Shopster { }
 
 impl Shopster {
     pub fn new(database_selector: DatabaseSelector) -> Self {
