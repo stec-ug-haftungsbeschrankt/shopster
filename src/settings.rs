@@ -5,10 +5,10 @@ use crate::postgresql::dbsettings::DbSetting;
 use crate::ShopsterError;
 
 pub struct Setting {
-    id: i32,
-    title: String,
-    datatype: String,
-    value: String
+    pub id: i32,
+    pub title: String,
+    pub datatype: String,
+    pub value: String
 }
 
 impl From<&DbSetting> for Setting {
@@ -73,23 +73,13 @@ impl Settings {
         */
     }
         
-    pub fn delete(&self, id: Uuid) -> Result<Setting, ShopsterError> {
-        todo!()
-        /*
-        let title = request.into_inner().title;
-        let result = DbSetting::delete_by_title(&title);
+    pub fn delete_by_id(&self, id: i32) -> Result<bool, ShopsterError> {
+        let result = DbSetting::delete(self.tenant_id, id)?;
+        Ok(result > 0)
+    }
     
-        let reply = match result {
-            Ok(r) => SettingResponse {
-                success: r > 0,
-                title
-            },
-            Err(_e) => SettingResponse {
-                success: false,
-                title
-            }
-        };
-        Ok(Response::new(reply))
-        */
+    pub fn delete_by_title(&self, title: String) -> Result<bool, ShopsterError> {
+        let result = DbSetting::delete_by_title(self.tenant_id, &title)?;
+        Ok(result > 0)
     }
 }
