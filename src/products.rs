@@ -1,5 +1,5 @@
 
-use crate::DbConnection;
+use crate::{DbConnection, error::ShopsterError};
 use crate::postgresql::dbproduct::DbProduct;
 use chrono::{NaiveDateTime, Utc};
 use uuid::Uuid;
@@ -84,38 +84,30 @@ impl Products {
     pub fn new(tenant_id: Uuid) -> Self {
         Products { tenant_id }
     }
+    
+    pub fn get_all(&self) -> Result<Vec<Product>, ShopsterError> {
+        let db_products = DbProduct::get_all(self.tenant_id)?;
+        let products = db_products.iter().map(Product::from).collect();
+        Ok(products)
+    }
+    
+    pub fn get(&self, product_id: i64) -> Result<Product, ShopsterError> {
+        let db_product = DbProduct::find(self.tenant_id, product_id)?;
+        let product = Product::from(&db_product);
+        Ok(product)
+    }
+    
+    pub fn insert(&self, product: Product) -> Result<Product, ShopsterError> {
+        let db_product = DbProduct::from(&product);
+        let created_product = DbProduct::create(self.tenant_id, db_product)?;
+
+        let reply = Product::from(&created_product);
+        Ok(reply)
+    }
 }
 
 
 /*
-async fn get_all(&self, _request: Request<Empty>) -> Result<Response<ProductList>, Status> {
-        let db_products = DbProduct::get_all()
-            .map_err(|e| Status::unavailable(e.to_string()))?;
-
-        let products = db_products.iter().map(Product::from).collect();
-        let reply = ProductList { products };
-        Ok(Response::new(reply))
-    }
-
-    async fn get(&self, request: Request<ProductRequest>) -> Result<Response<Product>, Status> {
-        let product_request = request.into_inner();
-        let db_product = DbProduct::find(product_request.id)
-            .map_err(|e| Status::unavailable(e.to_string()))?;
-
-        let reply = Product::from(&db_product);
-        Ok(Response::new(reply))
-    }
-
-    async fn insert(&self, request: Request<Product>) -> Result<Response<Product>, Status> {
-        let product = request.into_inner();
-        let db_product = DbProduct::from(&product);
-        let created_product = DbProduct::create(db_product)
-            .map_err(|e| Status::already_exists(e.to_string()))?;
-
-        let reply = Product::from(&created_product);
-        Ok(Response::new(reply))
-    }
-
     async fn update(&self, request: Request<Product>) -> Result<Response<Product>, Status> {
         let product = request.into_inner();
 

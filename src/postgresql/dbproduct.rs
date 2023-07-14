@@ -6,10 +6,11 @@ use diesel::{
     Insertable
 };
 use diesel::prelude::*;
-
+use uuid::Uuid;
 use crate::ShopsterError;
 use crate::schema::*;
 use crate::DbConnection;
+use crate::aquire_database;
 
 
 
@@ -75,41 +76,50 @@ impl From<&DbProduct> for InsertableDbProduct {
 
 impl DbProduct {
 
-    pub fn find(connection: &mut DbConnection, id: i64) -> Result<Self, ShopsterError> {
+    pub fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let product = products::table
             .filter(products::id.eq(id))
-            .first(connection)?;
+            .first(&mut connection)?;
         Ok(product)
     }
 
-    pub fn get_all(connection: &mut DbConnection, ) -> Result<Vec<Self>, ShopsterError> {
-        let products = products::table.load(connection)?;
+    pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
+        let products = products::table.load(&mut connection)?;
         Ok(products)
     }
 
-    pub fn create(connection: &mut DbConnection, product: DbProduct) -> Result<Self, ShopsterError> {
+    pub fn create(tenant_id: Uuid, product: DbProduct) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let insertable = InsertableDbProduct::from(&product);
         let db_product = diesel::insert_into(products::table)
             .values(insertable)
-            .get_result(connection)?;
+            .get_result(&mut connection)?;
         Ok(db_product)
     }
 
-    pub fn update(connection: &mut DbConnection, id: i64, product: DbProduct) -> Result<Self, ShopsterError> {
-
+    pub fn update(tenant_id: Uuid, id: i64, product: DbProduct) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let db_product = diesel::update(products::table)
             .filter(products::id.eq(id))
             .set(product)
-            .get_result(connection)?;
+            .get_result(&mut connection)?;
         Ok(db_product)
     }
 
-    pub fn delete(connection: &mut DbConnection, id: i64) -> Result<usize, ShopsterError> {
+    pub fn delete(tenant_id: Uuid, id: i64) -> Result<usize, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
         let res = diesel::delete(
                 products::table
                     .filter(products::id.eq(id))
             )
-            .execute(connection)?;
+            .execute(&mut connection)?;
         Ok(res)
     }
 }
