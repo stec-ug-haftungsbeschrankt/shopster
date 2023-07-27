@@ -1,3 +1,4 @@
+pub mod dbbasket;
 pub mod dbimage;
 pub mod dborder;
 pub mod dbproduct;

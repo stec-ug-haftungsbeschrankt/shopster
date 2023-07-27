@@ -7,6 +7,23 @@ pub mod sql_types {
 }
 
 diesel::table! {
+    basketproducts (id) {
+        id -> Int8,
+        product_id -> Int8,
+        quantity -> Int8,
+        basket_id -> Nullable<Uuid>,
+    }
+}
+
+diesel::table! {
+    baskets (id) {
+        id -> Uuid,
+        created_at -> Timestamp,
+        updated_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Orderstatus;
 
@@ -61,7 +78,11 @@ diesel::table! {
     }
 }
 
+diesel::joinable!(basketproducts -> baskets (basket_id));
+
 diesel::allow_tables_to_appear_in_same_query!(
+    basketproducts,
+    baskets,
     orders,
     products,
     settings,

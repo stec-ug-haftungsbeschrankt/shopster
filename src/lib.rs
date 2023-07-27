@@ -4,6 +4,7 @@ extern crate diesel;
 mod postgresql;
 mod error;
 mod schema;
+pub mod baskets;
 pub mod products;
 pub mod orders;
 pub mod settings;
@@ -22,6 +23,7 @@ use std::sync::Mutex;
 use tenet::Tenet;
 use uuid::Uuid;
 
+use baskets::Baskets;
 use products::Products;
 use orders::Orders;
 use settings::Settings;
@@ -92,6 +94,10 @@ impl Shopster {
     pub fn new(database_selector: DatabaseSelector) -> Self {
         DATABASE_SELECTOR.set(Mutex::new(database_selector)).unwrap();
         Shopster { }
+    }
+    
+    pub fn baskets(&mut self, tenant_id: Uuid) -> Result<Baskets, ShopsterError> {
+        Ok(Baskets::new(tenant_id))
     }
 
     pub fn products(&mut self, tenant_id: Uuid) -> Result<Products, ShopsterError> {     
