@@ -50,6 +50,20 @@ impl DatabaseSelector {
         }
     }
 
+    pub fn add_default(&mut self, connection_string: String) -> Result<Uuid, ShopsterError> {
+        info!("Initializing default Database");
+        let manager = ConnectionManager::<PgConnection>::new(connection_string);
+        let pool = Pool::new(manager)?;
+
+        let mut database_connection = pool.get()?;
+        database_connection.run_pending_migrations(MIGRATIONS).unwrap();
+
+        let tenant_id = Uuid::new_v4();
+        self.database_cache.insert(tenant_id, pool);
+
+        Ok(tenant_id)
+    }
+
     fn get_storage_for_tenant(&mut self, tenant_id: Uuid) -> Result<Pool, ShopsterError> {
         info!("Initializing Database");
     
