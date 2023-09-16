@@ -11,7 +11,7 @@ diesel::table! {
         id -> Int8,
         product_id -> Int8,
         quantity -> Int8,
-        basket_id -> Nullable<Uuid>,
+        basket_id -> Uuid,
     }
 }
 

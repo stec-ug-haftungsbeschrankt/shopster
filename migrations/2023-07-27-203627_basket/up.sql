@@ -9,7 +9,7 @@ CREATE TABLE "baskets" (
 
 CREATE TABLE "basketproducts" (
   id BIGSERIAL PRIMARY KEY,
-  product_id BIGSERIAL,
+  product_id BIGSERIAL NOT NULL,
   quantity BIGINT NOT NULL,
-  basket_id UUID references baskets(id)
+  basket_id UUID NOT NULL references baskets(id)
 )

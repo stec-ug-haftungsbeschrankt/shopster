@@ -21,6 +21,41 @@ pub struct DbBasketProduct {
     pub basket_id: Uuid
 }
 
+impl DbBasketProduct {
+    pub fn find_basket_item(tenant_id: Uuid, basket_product_id: i64) -> Result<DbBasketProduct, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let basket_product = basketproducts::table
+            .filter(basketproducts::id.eq(basket_product_id))
+            .first(&mut connection)?;
+        Ok(basket_product)
+    }
+
+    pub fn get_basket_items(tenant_id: Uuid, basket_id: Uuid) -> Result<Vec<DbBasketProduct>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let basket_products = basketproducts::table
+            .filter(basketproducts::basket_id.eq(basket_id))
+            .get_results(&mut connection)?;
+        Ok(basket_products)
+    }
+
+    pub fn add_or_update_item(tenant_id: Uuid, basket_product: DbBasketProduct) -> Result<DbBasketProduct, ShopsterError> {
+        todo!()
+    }
+
+    pub fn delete_item(tenant_id: Uuid, basket_product_id: i64) -> Result<usize, ShopsterError>{
+        let mut connection = aquire_database(tenant_id)?;
+
+        let res = diesel::delete(
+            basketproducts::table
+                .filter(basketproducts::id.eq(basket_product_id))
+        ).execute(&mut connection)?;
+        Ok(res)
+    }
+}
+
+
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
 #[diesel(table_name = baskets)]
 pub struct DbBasket {

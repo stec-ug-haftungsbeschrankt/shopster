@@ -1,5 +1,5 @@
 use uuid::Uuid;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, NaiveDateTime, Utc};
 
 use crate::{postgresql::dbbasket::DbBasket, error::ShopsterError};
 
@@ -28,6 +28,16 @@ impl From<&DbBasket> for Basket {
     }
 }
 
+impl From<&Basket> for DbBasket {
+    fn from(basket: &Basket) -> Self {
+        DbBasket {
+            id: basket.id,
+            created_at: basket.created_at,
+            updated_at: basket.updated_at,
+        }
+    }
+}
+
 
 pub struct Baskets {
     tenant_id: Uuid
@@ -44,14 +54,17 @@ impl Baskets {
         Ok(basket)
     }
     
-    pub fn add_basket(&self) -> Uuid {
-        todo!()
+    pub fn add_basket(&self) -> Result<Uuid, ShopsterError> {
+        let db_basket = DbBasket::create(self.tenant_id)?;
+        Ok(db_basket.id)
     }
     
-    pub fn delete_basket(&self, basket_id: Uuid) {
-        todo!()
+    pub fn delete_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
+        self.clear_basket(basket_id)?;
+        let deleted_baskets = DbBasket::delete(self.tenant_id, basket_id)?;
+        Ok(deleted_baskets > 0)
     }
-    
+
     pub fn add_product_to_basket(&self, basket_id: Uuid, product_id: i64, quantity: i32) {
         todo!()
     }
@@ -62,7 +75,7 @@ impl Baskets {
         todo!()
     }
     
-    pub fn clear_basket(&self, basket_id: Uuid) {
+    pub fn clear_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
         todo!()
     }
 }
