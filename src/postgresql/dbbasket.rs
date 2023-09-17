@@ -53,6 +53,18 @@ impl DbBasketProduct {
         ).execute(&mut connection)?;
         Ok(res)
     }
+
+    pub fn delete_all_basket_items(tenant_id: Uuid, basket_id: Uuid) -> Result<usize, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let result = diesel::delete(
+            basketproducts::table.filter(
+                basketproducts::basket_id.eq(basket_id)
+            )
+        ).execute(&mut connection)?;
+
+        Ok(result)
+    }
 }
 
 

@@ -1,7 +1,8 @@
 use uuid::Uuid;
-use chrono::{DateTime, NaiveDateTime, Utc};
+use chrono::NaiveDateTime;
 
 use crate::{postgresql::dbbasket::DbBasket, error::ShopsterError};
+use crate::postgresql::dbbasket::DbBasketProduct;
 
 
 pub struct BasketProduct {
@@ -69,13 +70,14 @@ impl Baskets {
         todo!()
     }
     
-    pub fn remove_product_to_basket(&self, basket_id: Uuid, product_id: i32, quanity: Option<i32>) {
+    pub fn remove_product_from_basket(&self, basket_id: Uuid, product_id: i32, quanity: Option<i32>) {
         let amount = quanity.unwrap_or(1);
         
         todo!()
     }
     
     pub fn clear_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
-        todo!()
+        let result = DbBasketProduct::delete_all_basket_items(self.tenant_id, basket_id)?;
+        Ok(result > 0)
     }
 }
