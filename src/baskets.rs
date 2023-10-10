@@ -6,9 +6,19 @@ use crate::postgresql::dbbasket::DbBasketProduct;
 
 
 pub struct BasketProduct {
-    id: i64,
-    product_id: i64,
-    quantity: i32
+    pub id: i64,
+    pub product_id: i64,
+    pub quantity: i64
+}
+
+impl From<&DbBasketProduct> for BasketProduct {
+    fn from(db_basket_product: &DbBasketProduct) -> Self {
+        BasketProduct {
+            id: db_basket_product.id,
+            product_id: db_basket_product.product_id,
+            quantity: db_basket_product.quantity
+        }
+    }
 }
 
 pub struct Basket {
@@ -66,15 +76,24 @@ impl Baskets {
         Ok(deleted_baskets > 0)
     }
 
-    pub fn add_product_to_basket(&self, basket_id: Uuid, product_id: i64, quantity: i32) {
-        todo!()
+    pub fn set_product_to_basket(&self, basket_id: Uuid, product_id: i64, quantity: i64) -> Result<i64, ShopsterError> {
+        let items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id)?;
+
+        if let Some(item) = items.into_iter().find(|x| x.product_id == product_id) {
+            let updated_item = DbBasketProduct::update_basket_item(self.tenant_id, item.id, item)?;
+            return Ok(updated_item.id);
+        } else {
+            let basket_product = DbBasketProduct { id: 0, product_id, quantity, basket_id };
+            let new_item = DbBasketProduct::create_basket_item(self.tenant_id, basket_product)?;
+            return Ok(new_item.id);
+        }
     }
-    
-    pub fn remove_product_from_basket(&self, basket_id: Uuid, product_id: i32, quanity: Option<i32>) {
-        let amount = quanity.unwrap_or(1);
-        
-        todo!()
-    }
+
+    pub fn get_products_from_basket(&self, basket_id: Uuid) -> Result<Vec<BasketProduct>, ShopsterError> {
+        let db_items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id)?;
+        let items = db_items.iter().map(|x| BasketProduct::from(x)).collect();
+        Ok(items)
+    } 
     
     pub fn clear_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
         let result = DbBasketProduct::delete_all_basket_items(self.tenant_id, basket_id)?;

@@ -21,6 +21,24 @@ pub struct DbBasketProduct {
     pub basket_id: Uuid
 }
 
+#[derive(Debug, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = basketproducts)]
+pub struct InsertableDbBasketProduct {
+    pub product_id: i64,
+    pub quantity: i64,
+    pub basket_id: Uuid
+}
+
+impl From<&DbBasketProduct> for InsertableDbBasketProduct {
+    fn from(basket_product: &DbBasketProduct) -> Self {
+        InsertableDbBasketProduct {
+            product_id: basket_product.product_id,
+            quantity: basket_product.quantity,
+            basket_id: basket_product.basket_id
+        }
+    }
+}
+
 impl DbBasketProduct {
     pub fn find_basket_item(tenant_id: Uuid, basket_product_id: i64) -> Result<DbBasketProduct, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
@@ -40,11 +58,27 @@ impl DbBasketProduct {
         Ok(basket_products)
     }
 
-    pub fn add_or_update_item(tenant_id: Uuid, basket_product: DbBasketProduct) -> Result<DbBasketProduct, ShopsterError> {
-        todo!()
+    pub fn create_basket_item(tenant_id: Uuid, basket_product: DbBasketProduct) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let insertable = InsertableDbBasketProduct::from(&basket_product);
+        let db_basket_product = diesel::insert_into(basketproducts::table)
+            .values(insertable)
+            .get_result(&mut connection)?;
+        Ok(db_basket_product)
     }
 
-    pub fn delete_item(tenant_id: Uuid, basket_product_id: i64) -> Result<usize, ShopsterError>{
+    pub fn update_basket_item(tenant_id: Uuid, id: i64, basket_product: DbBasketProduct) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let db_basket_product = diesel::update(basketproducts::table)
+            .filter(basketproducts::id.eq(id))
+            .set(basket_product)
+            .get_result(&mut connection)?;
+        Ok(db_basket_product)
+    }
+
+    pub fn delete_basket_item(tenant_id: Uuid, basket_product_id: i64) -> Result<usize, ShopsterError>{
         let mut connection = aquire_database(tenant_id)?;
 
         let res = diesel::delete(
