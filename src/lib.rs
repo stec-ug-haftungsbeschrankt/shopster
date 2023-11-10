@@ -5,6 +5,7 @@ mod postgresql;
 mod error;
 mod schema;
 pub mod baskets;
+pub mod customers;
 pub mod products;
 pub mod orders;
 pub mod settings;
@@ -24,6 +25,7 @@ use tenet::Tenet;
 use uuid::Uuid;
 
 use baskets::Baskets;
+use customers::Customers;
 use products::Products;
 use orders::Orders;
 use settings::Settings;
@@ -112,6 +114,10 @@ impl Shopster {
     
     pub fn baskets(&mut self, tenant_id: Uuid) -> Result<Baskets, ShopsterError> {
         Ok(Baskets::new(tenant_id))
+    }
+
+    pub fn customers(&mut self, tenant_id: Uuid) -> Result<Customers, ShopsterError> {
+        Ok(Customers::new(tenant_id))
     }
 
     pub fn products(&mut self, tenant_id: Uuid) -> Result<Products, ShopsterError> {     

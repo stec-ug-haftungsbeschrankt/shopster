@@ -24,6 +24,19 @@ diesel::table! {
 }
 
 diesel::table! {
+    customers (id) {
+        id -> Uuid,
+        email -> Text,
+        email_verified -> Bool,
+        algorithm -> Text,
+        password -> Text,
+        full_name -> Text,
+        created_at -> Timestamp,
+        updated_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::Orderstatus;
 
@@ -83,6 +96,7 @@ diesel::joinable!(basketproducts -> baskets (basket_id));
 diesel::allow_tables_to_appear_in_same_query!(
     basketproducts,
     baskets,
+    customers,
     orders,
     products,
     settings,
