@@ -103,7 +103,7 @@ pub struct InsertableDbOrder {
 impl From<&DbOrder> for InsertableDbOrder {
     fn from(order: &DbOrder) -> Self {
         InsertableDbOrder {
-            status: order.status.clone(),
+            status: order.status,
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
             created_at: order.created_at,

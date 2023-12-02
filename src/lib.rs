@@ -36,7 +36,7 @@ pub type DbConnection = r2d2::PooledConnection<ConnectionManager<PgConnection>>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
-const DATABASE_AQUISITION_ERROR: &str = "Unable to quire Database";
+const DATABASE_AQUISITION_ERROR: &str = "Unable to aquire Database";
 
 #[derive(Debug)]
 pub struct DatabaseSelector {
@@ -112,23 +112,23 @@ impl Shopster {
         Shopster { }
     }
     
-    pub fn baskets(&mut self, tenant_id: Uuid) -> Result<Baskets, ShopsterError> {
+    pub fn baskets(&self, tenant_id: Uuid) -> Result<Baskets, ShopsterError> {
         Ok(Baskets::new(tenant_id))
     }
 
-    pub fn customers(&mut self, tenant_id: Uuid) -> Result<Customers, ShopsterError> {
+    pub fn customers(&self, tenant_id: Uuid) -> Result<Customers, ShopsterError> {
         Ok(Customers::new(tenant_id))
     }
 
-    pub fn products(&mut self, tenant_id: Uuid) -> Result<Products, ShopsterError> {     
+    pub fn products(&self, tenant_id: Uuid) -> Result<Products, ShopsterError> {     
         Ok(Products::new(tenant_id))
     }
 
-    pub fn orders(&mut self, tenant_id: Uuid) -> Result<Orders, ShopsterError> {
+    pub fn orders(&self, tenant_id: Uuid) -> Result<Orders, ShopsterError> {
         Ok(Orders::new(tenant_id))
     }
 
-    pub fn settings(&mut self, tenant_id: Uuid) -> Result<Settings, ShopsterError> {
+    pub fn settings(&self, tenant_id: Uuid) -> Result<Settings, ShopsterError> {
         Ok(Settings::new(tenant_id))
     } 
 }
@@ -168,12 +168,11 @@ mod tests {
         
         let database_selector = DatabaseSelector::new(tenet);
         
-        let mut shopster = Shopster::new(database_selector);
+        let shopster = Shopster::new(database_selector);
         let settings = shopster.settings(tenant.id).unwrap().get_all();
         
         assert!(settings.is_ok());
         assert_eq!(12, settings.unwrap().len());
     }
-    
 }
 

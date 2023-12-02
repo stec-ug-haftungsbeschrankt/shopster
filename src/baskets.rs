@@ -81,17 +81,17 @@ impl Baskets {
 
         if let Some(item) = items.into_iter().find(|x| x.product_id == product_id) {
             let updated_item = DbBasketProduct::update_basket_item(self.tenant_id, item.id, item)?;
-            return Ok(updated_item.id);
+            Ok(updated_item.id)
         } else {
             let basket_product = DbBasketProduct { id: 0, product_id, quantity, basket_id };
             let new_item = DbBasketProduct::create_basket_item(self.tenant_id, basket_product)?;
-            return Ok(new_item.id);
+            Ok(new_item.id)
         }
     }
 
     pub fn get_products_from_basket(&self, basket_id: Uuid) -> Result<Vec<BasketProduct>, ShopsterError> {
         let db_items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id)?;
-        let items = db_items.iter().map(|x| BasketProduct::from(x)).collect();
+        let items = db_items.iter().map(BasketProduct::from).collect();
         Ok(items)
     } 
     

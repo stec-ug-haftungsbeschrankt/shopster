@@ -33,7 +33,7 @@ impl From<&Order> for DbOrder {
     fn from(order: &Order) -> Self {
         DbOrder {
             id: order.id,
-            status: order.status.into(),
+            status: order.status,
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
             created_at: Utc::now().naive_utc(),
