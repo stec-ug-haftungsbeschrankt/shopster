@@ -17,6 +17,7 @@ use diesel_migrations::EmbeddedMigrations;
 
 use error::ShopsterError;
 use crate::diesel_migrations::MigrationHarness;
+use crate::postgresql::DatabaseHelper;
 use log::info;
 use std::collections::HashMap;
 use std::sync::OnceLock;
@@ -80,9 +81,14 @@ impl DatabaseSelector {
             let storage = &storages[0]; // FIXME What if we have multiple storages? Choose by storage type? 
             let connection_string = storage.connection_string.clone().unwrap(); // Option unwrap
 
+            if !DatabaseHelper::is_database_exists::<PgConnection>(&connection_string) {
+                println!("Database does not exit, creating it...");
+                DatabaseHelper::create_database::<PgConnection>(&connection_string); // FIXME Error handling
+            }
+
             let manager = ConnectionManager::<PgConnection>::new(connection_string);
             let pool = Pool::new(manager)?;
-        
+
             let mut database_connection = pool.get()?;
             database_connection.run_pending_migrations(MIGRATIONS).unwrap();
 
