@@ -16,7 +16,7 @@ impl DatabaseHelper {
     pub fn create_database(db_url: &str) -> Result<(), Box<dyn std::error::Error>> {
         let (db_url, db_name) = db_url.rsplit_once('/').unwrap();
         let mut conn = PgConnection::establish(db_url)?;
-        sql_query(&("CREATE DATABASE ".to_owned() + db_name + ";")).execute(&mut conn).unwrap();
+        sql_query(&("CREATE DATABASE IF NOT EXISTS `".to_owned() + db_name + "`;")).execute(&mut conn).unwrap();
         Ok(())
     }
 
@@ -29,7 +29,7 @@ impl DatabaseHelper {
     pub fn drop_database(db_url: &str) -> Result<(), Box<dyn std::error::Error>> {
         let (db_url, db_name) = db_url.rsplit_once('/').unwrap();
         let mut conn = PgConnection::establish(db_url)?;
-        sql_query(&("DROP DATABASE ".to_owned() + db_name + ";")).execute(&mut conn).unwrap();
+        sql_query(&("DROP DATABASE `".to_owned() + db_name + "`;")).execute(&mut conn).unwrap();
         Ok(())
     }   
 
