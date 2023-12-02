@@ -81,9 +81,9 @@ impl DatabaseSelector {
             let storage = &storages[0]; // FIXME What if we have multiple storages? Choose by storage type? 
             let connection_string = storage.connection_string.clone().unwrap(); // Option unwrap
 
-            if !DatabaseHelper::is_database_exists::<PgConnection>(&connection_string) {
-                println!("Database does not exit, creating it...");
-                DatabaseHelper::create_database::<PgConnection>(&connection_string); // FIXME Error handling
+            if !DatabaseHelper::is_database_exists(&connection_string) {
+                info!("Database does not exit, creating it...");
+                DatabaseHelper::create_database(&connection_string); // FIXME Error handling
             }
 
             let manager = ConnectionManager::<PgConnection>::new(connection_string);
