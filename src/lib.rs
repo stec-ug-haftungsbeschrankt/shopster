@@ -110,6 +110,7 @@ fn aquire_database(tenant_id: Uuid) -> Result<DbConnection, ShopsterError> {
 }
 
 
+#[derive(Debug, Clone)]
 pub struct Shopster { }
 
 impl Shopster {
