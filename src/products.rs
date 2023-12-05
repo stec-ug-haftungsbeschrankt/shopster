@@ -12,7 +12,7 @@ pub struct Price {
 pub struct Product {
     pub id: i64,
     pub article_number: String,
-    gtin: String,
+    pub gtin: String,
     pub title: String,
     pub short_description: String,
     pub description: String,

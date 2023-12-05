@@ -2,8 +2,8 @@ extern crate diesel;
 #[macro_use] extern crate diesel_migrations;
 
 mod postgresql;
-mod error;
 mod schema;
+pub mod error;
 pub mod baskets;
 pub mod customers;
 pub mod products;
