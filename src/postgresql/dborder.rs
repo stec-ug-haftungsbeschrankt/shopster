@@ -10,6 +10,7 @@ use diesel::deserialize::{self, FromSql, FromSqlRow};
 use diesel::expression::AsExpression;
 use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{self, IsNull, Output, ToSql};
+use std::fmt;
 use std::io::Write;
 use uuid::Uuid;
 
@@ -25,6 +26,12 @@ pub enum OrderStatus {
     ReadyToShip,
     Shipping,
     Done
+}
+
+impl fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl ToSql<crate::schema::sql_types::Orderstatus, Pg> for OrderStatus {
