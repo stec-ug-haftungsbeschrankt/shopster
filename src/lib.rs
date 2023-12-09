@@ -16,6 +16,7 @@ use diesel::r2d2::ConnectionManager;
 use diesel_migrations::EmbeddedMigrations;
 
 use error::ShopsterError;
+use log::warn;
 use crate::diesel_migrations::MigrationHarness;
 use crate::postgresql::DatabaseHelper;
 use log::info;
@@ -83,7 +84,9 @@ impl DatabaseSelector {
 
             if !DatabaseHelper::is_database_exists(&connection_string) {
                 info!("Database does not exit, creating it...");
-                DatabaseHelper::create_database(&connection_string); // FIXME Error handling
+                if let Err(e) = DatabaseHelper::create_database(&connection_string) {
+                    warn!("{:?}", e);
+                }
             }
 
             let manager = ConnectionManager::<PgConnection>::new(connection_string);
@@ -115,7 +118,9 @@ pub struct Shopster { }
 
 impl Shopster {
     pub fn new(database_selector: DatabaseSelector) -> Self {
-        DATABASE_SELECTOR.set(Mutex::new(database_selector)).unwrap();
+        if let Err(e) = DATABASE_SELECTOR.set(Mutex::new(database_selector)) {
+            warn!("{:?}", e);
+        }
         Shopster { }
     }
     
