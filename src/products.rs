@@ -2,13 +2,16 @@
 use crate::error::ShopsterError;
 use crate::postgresql::dbproduct::DbProduct;
 use chrono::{NaiveDateTime, Utc};
+use serde_derive::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Price {
     pub amount: i64,
     pub currency: String
 }
 
+#[derive(Debug, Deserialize, Serialize)]
 pub struct Product {
     pub id: i64,
     pub article_number: String,
