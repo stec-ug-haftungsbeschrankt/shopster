@@ -72,6 +72,13 @@ impl From<DbCustomer> for DbCustomerMessage {
 
 
 impl DbCustomer {
+    pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        
+        let customers = customers::table.load(&mut connection)?;
+        Ok(customers)
+    }
+
     pub fn find(tenant_id: Uuid, customer_id: Uuid) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
         let customer = customers::table
