@@ -10,7 +10,19 @@ use uuid::Uuid;
 use crate::ShopsterError;
 use crate::schema::*;
 use crate::aquire_database;
+use argon2::Config;
+use rand::Rng;
 
+
+#[derive(Serialize, Deserialize, PartialEq, AsChangeset)]
+#[diesel(table_name = customers)]
+pub struct DbCustomerMessage {
+    pub email: String,
+    pub email_verified: bool,
+    pub password: String,
+    pub algorithm: String,
+    pub full_name: String,
+}
 
 
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable)]
@@ -25,5 +37,102 @@ pub struct DbCustomer {
     pub full_name: String,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>
+}
+
+
+
+impl From<DbCustomerMessage> for DbCustomer {
+    fn from(customer: DbCustomerMessage) -> Self {
+        DbCustomer {
+            id: Uuid::new_v4(),
+            email: customer.email,
+            email_verified: customer.email_verified,
+            password: customer.password,
+            algorithm: customer.algorithm,
+            full_name: customer.full_name,
+            created_at: Utc::now().naive_utc(),
+            updated_at: None,
+        }
+    }
+}
+
+impl From<DbCustomer> for DbCustomerMessage {
+    fn from(customer: DbCustomer) -> Self {
+        DbCustomerMessage {
+            email: customer.email,
+            email_verified: customer.email_verified,
+            password: customer.password,
+            algorithm: customer.algorithm,
+            full_name: customer.full_name,
+        }
+    }
+}
+
+
+
+
+impl DbCustomer {
+    pub fn find(tenant_id: Uuid, customer_id: Uuid) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        let customer = customers::table
+            .filter(customers::id.eq(customer_id))
+            .first(&mut connection)?;
+        Ok(customer)
+    }
+
+    pub fn find_by_email(tenant_id: Uuid, email: String) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+        let customer = customers::table
+            .filter(customers::email.eq(email))
+            .first(&mut connection)?;
+        Ok(customer)
+    }
+
+    pub fn create(tenant_id: Uuid, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let mut new_customer = DbCustomer::from(customer);
+        new_customer.hash_password()?;
+
+        let db_customer = diesel::insert_into(customers::table)
+            .values(new_customer)
+            .get_result(&mut connection)?;
+        Ok(db_customer)
+    }
+
+    pub fn update(tenant_id: Uuid, id: Uuid, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let customer = diesel::update(customers::table)
+            .filter(customers::id.eq(id))
+            .set(customer)
+            .get_result(&mut connection)?;
+        Ok(customer)
+    }
+
+    pub fn delete(tenant_id: Uuid, id: Uuid) -> Result<usize, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let res = diesel::delete(
+            customers::table.filter(customers::id.eq(id))
+            )
+            .execute(&mut connection)?;
+        Ok(res)
+    }
+
+    fn hash_password(&mut self) -> Result<(), ShopsterError> {
+        let salt: [u8; 32] = rand::thread_rng().gen();
+        // Alternative would be the low_memory variant. Can be time consuming.
+        // See https://github.com/sru-systems/rust-argon2/issues/52
+        let config = Config::original(); 
+
+        self.password = argon2::hash_encoded(self.password.as_bytes(), &salt, &config)?;
+
+        Ok(())
+    }
+
+    pub fn verify_password(&self, password: &str) -> Result<bool, ShopsterError> {
+        Ok(argon2::verify_encoded(&self.password, password.as_bytes())?)
+    }
 }
 

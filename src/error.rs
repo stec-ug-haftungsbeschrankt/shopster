@@ -14,5 +14,7 @@ pub enum ShopsterError {
     #[error("Tenant not found")]
     TenantNotFoundError,
     #[error("Tenant Storage not found")]
-    TenantStorageNotFound
+    TenantStorageNotFound,
+    #[error("Password hashing Error")]
+    PasswordHashingError(#[from] argon2::Error),
 }

@@ -575,6 +575,8 @@ dependencies = [
  "diesel_migrations",
  "log",
  "r2d2",
+ "rand",
+ "rust-argon2",
  "serde",
  "serde_derive",
  "serde_json",
