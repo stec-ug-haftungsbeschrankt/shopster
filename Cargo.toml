@@ -10,12 +10,12 @@ r2d2 = "0.8"
 diesel = { version = "2.1", features = ["postgres", "r2d2", "uuid", "chrono"] }
 diesel_migrations = "2.1"
 
-thiserror = "1"
+thiserror = "2.0"
 uuid = { version = "*", features = ["v4", "serde"] }
 chrono = { version = "0.4.19", features = ["serde"] }
 
 log = "*"
-simple_logger = "4.0"
+simple_logger = "5.0"
 
 rand = "0.8.3"
 rust-argon2 = "2.0.0"
@@ -25,3 +25,8 @@ serde_json = "*"
 serde_derive = "*"
 
 tenet = { git = "https://github.com/stec-ug-haftungsbeschrankt/tenet.git" }
+
+
+[dev-dependencies]
+testcontainers = "*"
+testcontainers-modules = { version = "0.11.4", features = ["postgres", "blocking"] }
