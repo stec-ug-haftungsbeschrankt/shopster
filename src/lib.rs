@@ -161,26 +161,23 @@ mod tests {
 
     use testcontainers_modules::postgres::Postgres;
     use testcontainers_modules::testcontainers::runners::SyncRunner;
-    
-    static TEST_TENET_DATABASE_URL: &str = "postgres://postgres:@localhost/stec_tenet_test";
-    static TEST_SHOPSTER_DATABASE_URL: &str = "postgres://postgres:@localhost/stec_shopster_test";
 
     fn test_harness(test_code: impl Fn(String, String)) {
-        let tenet_node = Postgres::default().start().unwrap();
+        let tenet_node = Postgres::default().start().expect("Unable to create to tenet container");
         let tenet_connection_string = format!("postgres://postgres:postgres@127.0.0.1:{}/postgres", tenet_node.get_host_port_ipv4(5432).unwrap());
 
-        let shopster_node = Postgres::default().start().unwrap();
+        let shopster_node = Postgres::default().start().expect("Unable to create to shopster container");
         let shopster_connection_string = format!("postgres://postgres:postgres@127.0.0.1:{}/stec_shopster_test", shopster_node.get_host_port_ipv4(5432).unwrap());
 
         test_code(tenet_connection_string, shopster_connection_string);
 
-        shopster_node.stop();
-        tenet_node.stop();
+        shopster_node.stop().expect("Failed to stop shopster");
+        tenet_node.stop().expect("Failed to stop tenet");
     }
 
     #[test]
     fn tenant_not_found_test() {
-        test_harness(|tenet_connection_string, shopster_connection_string| {
+        test_harness(|tenet_connection_string, _shopster_connection_string| {
             let tenet = Tenet::new(tenet_connection_string);
             let mut database_selector = DatabaseSelector::new(tenet);
             let tenant = database_selector.get_storage_for_tenant(Uuid::new_v4());
@@ -191,63 +188,65 @@ mod tests {
 
     #[test]
     fn settings_get_all() {
-        let tenant_database_url = TEST_TENET_DATABASE_URL.to_string();
-        let mut tenet = Tenet::new(tenant_database_url);
-        
-        let tenant = tenet.create_tenant("settings_get_all_test".to_string()).unwrap();
-        let storage = Storage::new_postgresql_database(TEST_SHOPSTER_DATABASE_URL.to_string(), tenant.id);
-        tenant.add_storage(&storage).unwrap();
-        
-        let database_selector = DatabaseSelector::new(tenet);
-        
-        let shopster = Shopster::new(database_selector);
-        let settings = shopster.settings(tenant.id).unwrap().get_all();
-        
-        assert!(settings.is_ok());
-        assert_eq!(12, settings.unwrap().len());
+        test_harness(|tenet_connection_string, shopster_connection_string| {
+            let tenet = Tenet::new(tenet_connection_string);
+
+            let tenant = tenet.create_tenant("settings_get_all_test".to_string()).unwrap();
+            let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+            tenant.add_storage(&storage).unwrap();
+
+            let database_selector = DatabaseSelector::new(tenet);
+
+            let shopster = Shopster::new(database_selector);
+            let settings = shopster.settings(tenant.id).unwrap().get_all();
+
+            assert!(settings.is_ok());
+            assert_eq!(13, settings.unwrap().len());
+        });
     }
 
     #[test]
     fn basket_test() {
-        let tenant_database_url = TEST_TENET_DATABASE_URL.to_string();
-        let mut tenet = Tenet::new(tenant_database_url);
-        
-        let tenant = tenet.create_tenant("settings_get_all_test".to_string()).unwrap();
-        let storage = Storage::new_postgresql_database(TEST_SHOPSTER_DATABASE_URL.to_string(), tenant.id);
-        tenant.add_storage(&storage).unwrap();
-        
-        let database_selector = DatabaseSelector::new(tenet);
-        
-        let shopster = Shopster::new(database_selector);
+        test_harness(|tenet_connection_string, shopster_connection_string| {
+            let tenet = Tenet::new(tenet_connection_string);
 
-        let products = shopster.products(tenant.id).unwrap();
-        let new_product = Product {
-            id: 0,
-            article_number: "ART-11111".to_string(),
-            title: "Test Product".to_string(),
-            gtin: "1234567890".to_string(),
-            short_description: "Short Description".to_string(),
-            description: "Description".to_string(),
-            image_url: "/images/ART-1111/IMG_1101.png".to_string(),
-            additional_images: Vec::new(),
-            price: Some(Price {
-                amount: 129,
-                currency: "EUR".to_string()
-            }),
-            weight: 88,
-            tags: Vec::new(),
-            created_at: Utc::now().naive_utc().to_owned(),
-            updated_at: None
-        };
-        let product = products.insert(new_product).unwrap();
+            let tenant = tenet.create_tenant("basket_test".to_string()).unwrap();
+            let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+            tenant.add_storage(&storage).unwrap();
 
-        let baskets = shopster.baskets(tenant.id).unwrap();
-        let basket_id = baskets.add_basket().unwrap();
-        let basket = baskets.get_basket(basket_id).unwrap();
+            let database_selector = DatabaseSelector::new(tenet);
 
-        baskets.set_product_to_basket(basket_id, product.id, 2).unwrap();
-        let products =  baskets.get_products_from_basket(basket_id).unwrap();
-        assert_eq!(1, products.len());
+            let shopster = Shopster::new(database_selector);
+
+            let products = shopster.products(tenant.id).unwrap();
+            let new_product = Product {
+                id: 0,
+                article_number: "ART-11111".to_string(),
+                title: "Test Product".to_string(),
+                gtin: "1234567890".to_string(),
+                short_description: "Short Description".to_string(),
+                description: "Description".to_string(),
+                image_url: "/images/ART-1111/IMG_1101.png".to_string(),
+                additional_images: Vec::new(),
+                price: Some(Price {
+                    amount: 129,
+                    currency: "EUR".to_string()
+                }),
+                weight: 88,
+                tags: Vec::new(),
+                created_at: Utc::now().naive_utc().to_owned(),
+                updated_at: None
+            };
+            let product = products.insert(new_product).unwrap();
+
+            let baskets = shopster.baskets(tenant.id).unwrap();
+            let basket_id = baskets.add_basket().unwrap();
+            let basket = baskets.get_basket(basket_id).unwrap();
+
+            baskets.set_product_to_basket(basket_id, product.id, 2).unwrap();
+            let products = baskets.get_products_from_basket(basket_id).unwrap();
+            assert_eq!(1, products.len());
+        });
     }
 }
 
