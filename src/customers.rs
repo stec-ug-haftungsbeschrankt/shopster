@@ -86,16 +86,16 @@ impl Customers {
         Ok(customer)
     }
     
-    pub fn insert(&self, customer: Customer) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomerMessage::from(&customer);
+    pub fn insert(&self, customer: &Customer) -> Result<Customer, ShopsterError> {
+        let db_customer = DbCustomerMessage::from(customer);
         let created_customer = DbCustomer::create(self.tenant_id, db_customer)?;
 
         let reply = Customer::from(&created_customer);
         Ok(reply)
     }
     
-    pub fn update(&self, customer: Customer) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomerMessage::from(&customer);
+    pub fn update(&self, customer: &Customer) -> Result<Customer, ShopsterError> {
+        let db_customer = DbCustomerMessage::from(customer);
         let updated_customer = DbCustomer::update(self.tenant_id, customer.id, db_customer)?;
 
         let reply = Customer::from(&updated_customer);

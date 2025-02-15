@@ -100,16 +100,16 @@ impl Products {
         Ok(product)
     }
     
-    pub fn insert(&self, product: Product) -> Result<Product, ShopsterError> {
-        let db_product = DbProduct::from(&product);
+    pub fn insert(&self, product: &Product) -> Result<Product, ShopsterError> {
+        let db_product = DbProduct::from(product);
         let created_product = DbProduct::create(self.tenant_id, db_product)?;
 
         let reply = Product::from(&created_product);
         Ok(reply)
     }
     
-    pub fn update(&self, product: Product) -> Result<Product, ShopsterError> {
-        let db_product = DbProduct::from(&product);
+    pub fn update(&self, product: &Product) -> Result<Product, ShopsterError> {
+        let db_product = DbProduct::from(product);
         let updated_product = DbProduct::update(self.tenant_id, product.id, db_product)?;
 
         let reply = Product::from(&updated_product);

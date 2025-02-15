@@ -150,6 +150,8 @@ impl Shopster {
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
+
+    use tenet::encryption_modes::EncryptionModes;
     use tenet::Storage;
 
     use super::*;
@@ -161,6 +163,7 @@ mod tests {
 
     use testcontainers_modules::postgres::Postgres;
     use testcontainers_modules::testcontainers::runners::SyncRunner;
+    use crate::customers::Customer;
 
     fn test_harness(test_code: impl Fn(String, String)) {
         let tenet_node = Postgres::default().start().expect("Unable to create to tenet container");
@@ -237,7 +240,7 @@ mod tests {
                 created_at: Utc::now().naive_utc().to_owned(),
                 updated_at: None
             };
-            let product = products.insert(new_product).unwrap();
+            let product = products.insert(&new_product).unwrap();
 
             let baskets = shopster.baskets(tenant.id).unwrap();
             let basket_id = baskets.add_basket().unwrap();
@@ -246,6 +249,53 @@ mod tests {
             baskets.set_product_to_basket(basket_id, product.id, 2).unwrap();
             let products = baskets.get_products_from_basket(basket_id).unwrap();
             assert_eq!(1, products.len());
+        });
+    }
+
+    #[test]
+    fn customer_test() {
+        test_harness(|tenet_connection_string, shopster_connection_string| {
+            let tenet = Tenet::new(tenet_connection_string);
+
+            let tenant = tenet.create_tenant("basket_test".to_string()).unwrap();
+            let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+            tenant.add_storage(&storage).unwrap();
+
+            let database_selector = DatabaseSelector::new(tenet);
+            let shopster = Shopster::new(database_selector);
+
+            let customers = shopster.customers(tenant.id).unwrap();
+            let new_customer = Customer {
+                id: Default::default(),
+                email: "test@stecug.de".to_string(),
+                email_verified: true,
+                encryption_mode: EncryptionModes::Argon2,
+                password: "1234567890".to_string(),
+                full_name: "Dummy Testuser".to_string(),
+                created_at: Default::default(),
+                updated_at: None,
+            };
+
+            let customer = customers.insert(&new_customer).unwrap();
+
+            let mut all_customers = customers.get_all().unwrap();
+            assert_eq!(1, all_customers.len());
+
+            let inserted_customer = all_customers.first().unwrap();
+            assert_eq!(new_customer.email, inserted_customer.email);
+            assert_eq!(new_customer.email_verified, inserted_customer.email_verified);
+            assert_eq!(new_customer.encryption_mode, inserted_customer.encryption_mode);
+            //assert_eq!(new_customer.password, inserted_customer.password); // Only Hash is returned
+            assert_eq!(new_customer.full_name, inserted_customer.full_name);
+
+            let updated_customer = all_customers.get_mut(0).unwrap();
+            updated_customer.email_verified = false;
+            updated_customer.email = "dummy@stecug.de".to_string();
+
+            customers.update(updated_customer).unwrap();
+
+            let success = customers.remove(all_customers.first().unwrap().id).unwrap();
+            assert_eq!(true, success);
         });
     }
 }
