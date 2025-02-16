@@ -66,16 +66,16 @@ impl Orders {
         Ok(reply)
     }
     
-    pub fn insert(&self, order: Order) -> Result<Order, ShopsterError> {
-        let db_order = DbOrder::from(&order);
+    pub fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
+        let db_order = DbOrder::from(order);
         let created_order = DbOrder::create(self.tenant_id, db_order)?;
 
         let reply = Order::from(&created_order);
         Ok(reply)
     }
     
-    pub fn update(&self, order: Order) -> Result<Order, ShopsterError> {
-        let db_order = DbOrder::from(&order);
+    pub fn update(&self, order: &Order) -> Result<Order, ShopsterError> {
+        let db_order = DbOrder::from(order);
         let updated_order = DbOrder::update(self.tenant_id, order.id, db_order)?;
 
         let reply = Order::from(&updated_order);
