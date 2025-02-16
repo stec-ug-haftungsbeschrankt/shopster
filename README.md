@@ -15,3 +15,10 @@ To test run the tests, use the following command:
 ```bash
 > cargo nextest run
 ```
+
+For Test coverage use:
+
+```bash
+> cargo install cargo-llvm-cov
+> cargo llvm-cov nextest
+```
