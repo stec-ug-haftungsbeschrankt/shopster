@@ -17,7 +17,7 @@ chrono = { version = "0.4.39", features = ["serde"] }
 log = "0.4.25"
 simple_logger = "5.0.0"
 
-rand = "0.8.5"
+rand = "0.9.1"
 rust-argon2 = "2.1.0"
 
 serde = "1.0.217"
