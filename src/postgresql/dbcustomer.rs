@@ -128,7 +128,7 @@ impl DbCustomer {
     }
 
     fn hash_password(&mut self) -> Result<(), ShopsterError> {
-        let salt: [u8; 32] = rand::thread_rng().gen();
+        let salt: [u8; 32] = rand::thread_rng().r#gen();
         // Alternative would be the low_memory variant. Can be time consuming.
         // See https://github.com/sru-systems/rust-argon2/issues/52
         let config = Config::original(); 
