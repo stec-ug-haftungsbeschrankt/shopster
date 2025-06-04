@@ -18,5 +18,7 @@ pub enum ShopsterError {
     #[error("Password hashing Error")]
     PasswordHashingError(#[from] argon2::Error),
     #[error("Invalid Operation")]
-    InvalidOperationError(String)
+    InvalidOperationError(String),
+    #[error("Authentication Error")]
+    AuthenticationError(String)
 }

@@ -41,29 +41,29 @@ pub struct DbCustomer {
 
 
 
-impl From<DbCustomerMessage> for DbCustomer {
-    fn from(customer: DbCustomerMessage) -> Self {
+impl From<&DbCustomerMessage> for DbCustomer {
+    fn from(customer: &DbCustomerMessage) -> Self {
         DbCustomer {
             id: Uuid::new_v4(),
-            email: customer.email,
+            email: customer.email.clone(),
             email_verified: customer.email_verified,
-            password: customer.password,
-            algorithm: customer.algorithm,
-            full_name: customer.full_name,
+            password: customer.password.clone(),
+            algorithm: customer.algorithm.clone(),
+            full_name: customer.full_name.clone(),
             created_at: Utc::now().naive_utc(),
             updated_at: None,
         }
     }
 }
 
-impl From<DbCustomer> for DbCustomerMessage {
-    fn from(customer: DbCustomer) -> Self {
+impl From<&DbCustomer> for DbCustomerMessage {
+    fn from(customer: &DbCustomer) -> Self {
         DbCustomerMessage {
-            email: customer.email,
+            email: customer.email.clone(),
             email_verified: customer.email_verified,
-            password: customer.password,
-            algorithm: customer.algorithm,
-            full_name: customer.full_name,
+            password: customer.password.clone(),
+            algorithm: customer.algorithm.clone(),
+            full_name: customer.full_name.clone(),
         }
     }
 }
@@ -98,7 +98,7 @@ impl DbCustomer {
     pub fn create(tenant_id: Uuid, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
 
-        let mut new_customer = DbCustomer::from(customer);
+        let mut new_customer = DbCustomer::from(&customer);
         new_customer.hash_password()?;
 
         let db_customer = diesel::insert_into(customers::table)
@@ -140,6 +140,41 @@ impl DbCustomer {
 
     pub fn verify_password(&self, password: &str) -> Result<bool, ShopsterError> {
         Ok(argon2::verify_encoded(&self.password, password.as_bytes())?)
+    }
+
+    pub fn count(tenant_id: Uuid) -> Result<i64, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let count: i64 = customers::table
+            .count()
+            .get_result(&mut connection)?;
+        Ok(count)
+    }
+
+    pub fn search(tenant_id: Uuid, search_term: &str) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let like_term = format!("%{}%", search_term);
+
+        let customers = customers::table
+            .filter(
+                customers::email.like(&like_term)
+                    .or(customers::full_name.like(&like_term))
+            )
+            .load(&mut connection)?;
+        Ok(customers)
+    }
+
+    pub fn get_with_pagination(tenant_id: Uuid, page: i64, per_page: i64) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let offset = (page - 1) * per_page;
+
+        let customers = customers::table
+            .offset(offset)
+            .limit(per_page)
+            .load(&mut connection)?;
+        Ok(customers)
     }
 }
 

@@ -8,6 +8,7 @@ use crate::error::ShopsterError;
 use crate::postgresql::dbcustomer::{DbCustomer, DbCustomerMessage};
 
 
+#[derive(Clone)]
 pub struct Customer {
     pub id: Uuid,
     pub email: String,
@@ -85,7 +86,13 @@ impl Customers {
         let customer = Customer::from(&db_customer);
         Ok(customer)
     }
-    
+
+    pub fn find_by_email(&self, email: String) -> Result<Customer, ShopsterError> {
+        let db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
+        let customer = Customer::from(&db_customer);
+        Ok(customer)
+    }
+
     pub fn insert(&self, customer: &Customer) -> Result<Customer, ShopsterError> {
         let db_customer = DbCustomerMessage::from(customer);
         let created_customer = DbCustomer::create(self.tenant_id, db_customer)?;
@@ -106,5 +113,110 @@ impl Customers {
         let result = DbCustomer::delete(self.tenant_id, customer_id)?;
         Ok(result > 0)
     }
+
+    pub fn verify_password(&self, customer_id: Uuid, password: &str) -> Result<bool, ShopsterError> {
+        let db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
+        db_customer.verify_password(password)
+    }
+
+    pub fn verify_email_password(&self, email: String, password: &str) -> Result<Customer, ShopsterError> {
+        let db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
+
+        // Überprüfe das Passwort
+        let is_valid = db_customer.verify_password(password)?;
+
+        if !is_valid {
+            return Err(ShopsterError::AuthenticationError("Ungültiges Passwort".to_string()));
+        }
+
+        // Wenn das Passwort korrekt ist, gib den Kunden zurück
+        let customer = Customer::from(&db_customer);
+        Ok(customer)
+    }
+
+
+    pub fn change_password(&self, customer_id: Uuid, current_password: &str, new_password: &str) -> Result<bool, ShopsterError> {
+        // Finde den Kunden
+        let db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
+
+        // Überprüfe das aktuelle Passwort
+        let is_valid = db_customer.verify_password(current_password)?;
+
+        if !is_valid {
+            return Err(ShopsterError::AuthenticationError("Aktuelles Passwort ist ungültig".to_string()));
+        }
+
+        // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
+        let mut customer_message = DbCustomerMessage::from(&db_customer);
+        customer_message.password = new_password.to_string();
+
+        // Aktualisiere den Kunden in der Datenbank
+        DbCustomer::update(self.tenant_id, customer_id, customer_message)?;
+
+        Ok(true)
+    }
+
+    pub fn reset_password(&self, email: String, new_password: &str) -> Result<bool, ShopsterError> {
+        // Finde den Kunden anhand der E-Mail-Adresse
+        let db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
+
+        // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
+        let mut customer_message = DbCustomerMessage::from(&db_customer);
+        customer_message.password = new_password.to_string();
+
+        // Aktualisiere den Kunden in der Datenbank
+        DbCustomer::update(self.tenant_id, db_customer.id, customer_message)?;
+
+        Ok(true)
+    }
+
+    // In einer realen Anwendung würde hier eine Methode zum Senden eines Passwort-Reset-Links hinzugefügt:
+    pub fn request_password_reset(&self, email: String) -> Result<bool, ShopsterError> {
+        // Finde den Kunden anhand der E-Mail-Adresse
+        let db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
+
+        // Hier würde in einer realen Anwendung:
+        // 1. Ein einmaliger Token generiert werden
+        // 2. Der Token in der Datenbank gespeichert werden (mit Ablaufzeit)
+        // 3. Eine E-Mail mit einem Reset-Link an den Kunden gesendet werden
+
+        // Da dies nur ein Beispiel ist, geben wir einfach true zurück
+        Ok(true)
+    }
+
+
+    pub fn verify_email(&self, customer_id: Uuid) -> Result<Customer, ShopsterError> {
+        // Finde den Kunden
+        let db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
+
+        // Erstelle eine aktualisierte Version des Kunden mit verifizierter E-Mail
+        let mut customer_message = DbCustomerMessage::from(&db_customer);
+        customer_message.email_verified = true;
+
+        // Aktualisiere den Kunden in der Datenbank
+        let updated_db_customer = DbCustomer::update(self.tenant_id, customer_id, customer_message)?;
+
+        // Konvertiere den aktualisierten Kunden und gib ihn zurück
+        let customer = Customer::from(&updated_db_customer);
+        Ok(customer)
+    }
+
+    pub fn count_customers(&self) -> Result<i64, ShopsterError> {
+        let count = DbCustomer::count(self.tenant_id)?;
+        Ok(count)
+    }
+
+    pub fn search_customers(&self, search_term: &str) -> Result<Vec<Customer>, ShopsterError> {
+        let db_customers = DbCustomer::search(self.tenant_id, search_term)?;
+        let customers = db_customers.iter().map(Customer::from).collect();
+        Ok(customers)
+    }
+
+    pub fn get_customers_with_pagination(&self, page: i64, per_page: i64) -> Result<Vec<Customer>, ShopsterError> {
+        let db_customers = DbCustomer::get_with_pagination(self.tenant_id, page, per_page)?;
+        let customers = db_customers.iter().map(Customer::from).collect();
+        Ok(customers)
+    }
+
 }
 
