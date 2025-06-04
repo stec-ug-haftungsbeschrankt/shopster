@@ -128,6 +128,14 @@ impl From<&DbBasket> for InsertableDbBasket {
 
 
 impl DbBasket {
+    pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let baskets = baskets::table
+            .load(&mut connection)?;
+        Ok(baskets)
+    }
+
     pub fn find(tenant_id: Uuid, basket_id: Uuid) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
         

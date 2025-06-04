@@ -17,4 +17,6 @@ pub enum ShopsterError {
     TenantStorageNotFound,
     #[error("Password hashing Error")]
     PasswordHashingError(#[from] argon2::Error),
+    #[error("Invalid Operation")]
+    InvalidOperationError(String)
 }
