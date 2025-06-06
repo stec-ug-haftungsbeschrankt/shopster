@@ -23,7 +23,7 @@ use log::info;
 use std::collections::HashMap;
 use std::sync::OnceLock;
 use std::sync::Mutex;
-use tenet::Tenet;
+use stec_tenet::Tenet;
 use uuid::Uuid;
 
 use baskets::Baskets;

@@ -1,9 +1,8 @@
 use std::str::FromStr;
 
-use tenet::encryption_modes::EncryptionModes;
+use stec_tenet::encryption_modes::EncryptionModes;
 use uuid::Uuid;
 use chrono::{NaiveDateTime, Utc};
-
 use crate::error::ShopsterError;
 use crate::postgresql::dbcustomer::{DbCustomer, DbCustomerMessage};
 

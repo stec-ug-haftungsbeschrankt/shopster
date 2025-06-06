@@ -1,4 +1,4 @@
-use tenet::TenetError;
+use stec_tenet::TenetError;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
