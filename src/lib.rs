@@ -149,7 +149,7 @@ impl Shopster {
 
 #[cfg(test)]
 mod tests {
-    use tenet::Storage;
+    use stec_tenet::Storage;
 
     use super::*;
 
