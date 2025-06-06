@@ -1,10 +1,10 @@
 mod common;
 
 use chrono::Utc;
-use tenet::{Storage, Tenet};
+use stec_tenet::{Storage, Tenet};
 use uuid::Uuid;
-use shopster::{DatabaseSelector, Shopster};
-use shopster::products::{Price, Product};
+use stec_shopster::{DatabaseSelector, Shopster};
+use stec_shopster::products::{Price, Product};
 use crate::common::test_harness;
 
 #[test]

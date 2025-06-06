@@ -1,9 +1,9 @@
 mod common;
 
-use tenet::{Storage, Tenet};
-use tenet::encryption_modes::EncryptionModes;
-use shopster::{DatabaseSelector, Shopster};
-use shopster::customers::Customer;
+use stec_tenet::{Storage, Tenet};
+use stec_tenet::encryption_modes::EncryptionModes;
+use stec_shopster::{DatabaseSelector, Shopster};
+use stec_shopster::customers::Customer;
 use uuid::Uuid;
 
 use crate::common::test_harness;
