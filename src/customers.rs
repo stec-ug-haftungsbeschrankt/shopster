@@ -136,7 +136,7 @@ impl Customers {
 
     pub fn change_password(&self, customer_id: Uuid, current_password: &str, new_password: &str) -> Result<bool, ShopsterError> {
         // Finde den Kunden
-        let db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
+        let mut db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
 
         // Überprüfe das aktuelle Passwort
         let is_valid = db_customer.verify_password(current_password)?;
@@ -145,9 +145,11 @@ impl Customers {
             return Err(ShopsterError::AuthenticationError("Aktuelles Passwort ist ungültig".to_string()));
         }
 
+        db_customer.password = new_password.to_string();
+        db_customer.hash_password()?;
+
         // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
         let mut customer_message = DbCustomerMessage::from(&db_customer);
-        customer_message.password = new_password.to_string();
 
         // Aktualisiere den Kunden in der Datenbank
         DbCustomer::update(self.tenant_id, customer_id, customer_message)?;
@@ -157,11 +159,13 @@ impl Customers {
 
     pub fn reset_password(&self, email: String, new_password: &str) -> Result<bool, ShopsterError> {
         // Finde den Kunden anhand der E-Mail-Adresse
-        let db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
+        let mut db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
+
+        db_customer.password = new_password.to_string();
+        db_customer.hash_password()?;
 
         // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
-        let mut customer_message = DbCustomerMessage::from(&db_customer);
-        customer_message.password = new_password.to_string();
+        let customer_message = DbCustomerMessage::from(&db_customer);
 
         // Aktualisiere den Kunden in der Datenbank
         DbCustomer::update(self.tenant_id, db_customer.id, customer_message)?;

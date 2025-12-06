@@ -110,6 +110,10 @@ impl DbCustomer {
     pub fn update(tenant_id: Uuid, id: Uuid, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
 
+        // FIXME Hash password if it has changed
+        // How do I notice, if the password has changed?
+        // Currently this is don at the Customer level, but it should be done at the database level.
+
         let customer = diesel::update(customers::table)
             .filter(customers::id.eq(id))
             .set(customer)
@@ -127,7 +131,7 @@ impl DbCustomer {
         Ok(res)
     }
 
-    fn hash_password(&mut self) -> Result<(), ShopsterError> {
+    pub fn hash_password(&mut self) -> Result<(), ShopsterError> {
         let salt: [u8; 32] = rand::rng().random();
         // Alternative would be the low_memory variant. Can be time consuming.
         // See https://github.com/sru-systems/rust-argon2/issues/52

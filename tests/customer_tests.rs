@@ -6,7 +6,7 @@ use stec_shopster::{DatabaseSelector, Shopster};
 use stec_shopster::customers::Customer;
 use uuid::Uuid;
 
-use crate::common::test_harness;
+use crate::common::{test_harness, test_harness_two_tenants};
 
 #[test]
 fn customer_test() {
@@ -474,11 +474,11 @@ fn search_customers_test() {
             },
             Customer {
                 id: Default::default(),
-                email: "robert.johnson@example.com".to_string(),
+                email: "robert.jahnson@example.com".to_string(),
                 email_verified: true,
                 encryption_mode: EncryptionModes::Argon2,
                 password: "RobertPassword".to_string(),
-                full_name: "Robert Johnson".to_string(),
+                full_name: "Robert Jahnson".to_string(),
                 created_at: Default::default(),
                 updated_at: None,
             },
@@ -863,15 +863,15 @@ fn search_pagination_integration_test() {
 #[test]
 fn tenant_isolation_test() {
     // Test, um sicherzustellen, dass Kunden zwischen Mandanten isoliert sind
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+    test_harness_two_tenants(|tenet_connection_string, shopster_connection_string1, shopster_connection_string2| {
         let tenet = Tenet::new(tenet_connection_string);
 
         // Erstellen von zwei Mandanten
         let tenant1 = tenet.create_tenant("tenant1_isolation_test".to_string()).unwrap();
         let tenant2 = tenet.create_tenant("tenant2_isolation_test".to_string()).unwrap();
 
-        let storage1 = Storage::new_postgresql_database(shopster_connection_string.clone(), tenant1.id);
-        let storage2 = Storage::new_postgresql_database(shopster_connection_string.clone(), tenant2.id);
+        let storage1 = Storage::new_postgresql_database(shopster_connection_string1.clone(), tenant1.id);
+        let storage2 = Storage::new_postgresql_database(shopster_connection_string2.clone(), tenant2.id);
 
         tenant1.add_storage(&storage1).unwrap();
         tenant2.add_storage(&storage2).unwrap();
