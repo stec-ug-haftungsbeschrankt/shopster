@@ -80,7 +80,10 @@ impl DatabaseSelector {
             }
             
             let storage = &storages[0]; // FIXME What if we have multiple storages? Choose by storage type? 
-            let connection_string = storage.connection_string.clone().unwrap(); // Option unwrap
+            let connection_string = match storage.connection_string.clone() {
+                Some(cs) => cs,
+                None => return Err(ShopsterError::TenantStorageNotFound)
+            };
 
             if !DatabaseHelper::is_database_exists(&connection_string) {
                 info!("Database does not exit, creating it...");
@@ -93,7 +96,11 @@ impl DatabaseSelector {
             let pool = Pool::new(manager)?;
 
             let mut database_connection = pool.get()?;
-            database_connection.run_pending_migrations(MIGRATIONS).unwrap();
+
+            match database_connection.run_pending_migrations(MIGRATIONS) {
+                Ok(_) => info!("Shopster Database migrations successfully executed."),
+                Err(e) => warn!("{:?}", e)
+            }
 
             self.database_cache.insert(tenant.id, pool);
         }

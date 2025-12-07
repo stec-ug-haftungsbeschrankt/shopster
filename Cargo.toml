@@ -5,7 +5,7 @@ authors = ["Stefan Schick <stefan.schick@stecug.de>"]
 license = "GPL-3.0-or-later"
 readme = "README.md"
 homepage = "https://stecug.de"
-version = "0.2.5"
+version = "0.2.6"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -29,7 +29,7 @@ serde = "1.0.228"
 serde_json = "1.0.145"
 serde_derive = "1.0.228"
 
-stec_tenet = "0.3.0"
+stec_tenet = "0.3.2"
 
 
 [dev-dependencies]

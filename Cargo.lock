@@ -1546,17 +1546,6 @@ dependencies = [
 
 [[package]]
 name = "rust-argon2"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9d9848531d60c9cbbcf9d166c885316c24bc0e2a9d3eba0956bb6cbbd79bc6e8"
-dependencies = [
- "base64 0.21.7",
- "blake2b_simd",
- "constant_time_eq 0.3.1",
-]
-
-[[package]]
-name = "rust-argon2"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ae76b7506744d254fd0eb2c0ff5c5d108201ccbb083111ac04a44eeda105680"
@@ -1876,7 +1865,7 @@ checksum = "a8f112729512f8e442d81f95a8a7ddf2b7c6b8a1a6f509a95864142b30cab2d3"
 
 [[package]]
 name = "stec_shopster"
-version = "0.2.3"
+version = "0.2.6"
 dependencies = [
  "chrono",
  "diesel",
@@ -1884,7 +1873,7 @@ dependencies = [
  "log",
  "r2d2",
  "rand",
- "rust-argon2 3.0.0",
+ "rust-argon2",
  "serde",
  "serde_derive",
  "serde_json",
@@ -1897,9 +1886,9 @@ dependencies = [
 
 [[package]]
 name = "stec_tenet"
-version = "0.3.0"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6494a751461ee2819559fd13871fbbe69dbab7cf212408b0f0810beb54837890"
+checksum = "0fe813edb428841655e749f676c361e33c033488fbf1333bf5e0e0e29bae6724"
 dependencies = [
  "chrono",
  "diesel",
@@ -1907,7 +1896,7 @@ dependencies = [
  "log",
  "r2d2",
  "rand",
- "rust-argon2 2.1.0",
+ "rust-argon2",
  "serde",
  "serde_derive",
  "serde_json",
