@@ -80,7 +80,8 @@ impl Baskets {
 
     pub fn get_basket(&self, basket_id: Uuid) -> Result<Basket, ShopsterError> {
         let db_basket = DbBasket::find(self.tenant_id, basket_id)?;
-        let basket = Basket::from(&db_basket);
+        let mut basket = Basket::from(&db_basket);
+        basket.products = self.get_products_from_basket(basket.id)?;
         Ok(basket)
     }
     
