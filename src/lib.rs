@@ -85,6 +85,8 @@ impl DatabaseSelector {
                 None => return Err(ShopsterError::TenantStorageNotFound)
             };
 
+            info!("Database connection string: {}", connection_string);
+
             if !DatabaseHelper::is_database_exists(&connection_string) {
                 info!("Database does not exit, creating it...");
                 if let Err(e) = DatabaseHelper::create_database(&connection_string) {
@@ -99,7 +101,7 @@ impl DatabaseSelector {
 
             match database_connection.run_pending_migrations(MIGRATIONS) {
                 Ok(_) => info!("Shopster Database migrations successfully executed."),
-                Err(e) => warn!("{:?}", e)
+                Err(e) => warn!("Migrations failed: {:?}", e)
             }
 
             self.database_cache.insert(tenant.id, pool);
