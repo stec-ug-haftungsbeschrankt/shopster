@@ -69,9 +69,9 @@ impl DatabaseSelector {
     }
 
     fn get_storage_for_tenant(&mut self, tenant_id: Uuid) -> Result<Pool, ShopsterError> {
-        info!("Initializing Database");
-    
         if !self.database_cache.contains_key(&tenant_id) {
+            info!("Initializing Database");
+
             let tenant = self.tenants.get_tenant_by_id(tenant_id).ok_or(ShopsterError::TenantNotFoundError)?;
             let storages = tenant.get_storages();
             
