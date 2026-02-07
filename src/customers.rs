@@ -149,7 +149,7 @@ impl Customers {
         db_customer.hash_password()?;
 
         // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
-        let mut customer_message = DbCustomerMessage::from(&db_customer);
+        let customer_message = DbCustomerMessage::from(&db_customer);
 
         // Aktualisiere den Kunden in der Datenbank
         DbCustomer::update(self.tenant_id, customer_id, customer_message)?;

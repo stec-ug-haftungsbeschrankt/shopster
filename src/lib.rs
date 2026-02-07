@@ -9,6 +9,7 @@ pub mod customers;
 pub mod products;
 pub mod orders;
 pub mod settings;
+pub use orders::OrderStatus;
 
 use diesel::PgConnection;
 use diesel::r2d2;
@@ -169,7 +170,7 @@ mod tests {
     use testcontainers_modules::testcontainers::runners::SyncRunner;
     
     use crate::orders::Order;
-    use crate::postgresql::dborder::OrderStatus;
+    use crate::orders::OrderStatus;
 
     fn test_harness(test_code: impl Fn(String, String)) {
         let tenet_node = Postgres::default().start().expect("Unable to create to tenet container");
@@ -257,4 +258,3 @@ mod tests {
         });
     }
 }
-

@@ -2,8 +2,8 @@
 
 pub mod sql_types {
     #[derive(diesel::sql_types::SqlType)]
-    #[diesel(postgres_type(name = "orderstatus"))]
-    pub struct Orderstatus;
+    #[diesel(postgres_type(name = "dborderstatus"))]
+    pub struct DbOrderStatus;
 }
 
 diesel::table! {
@@ -38,11 +38,11 @@ diesel::table! {
 
 diesel::table! {
     use diesel::sql_types::*;
-    use super::sql_types::Orderstatus;
+    use super::sql_types::DbOrderStatus;
 
     orders (id) {
         id -> Int8,
-        status -> Orderstatus,
+        status -> DbOrderStatus,
         delivery_address -> Text,
         billing_address -> Text,
         created_at -> Timestamp,

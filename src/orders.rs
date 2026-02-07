@@ -3,7 +3,40 @@ use chrono::{NaiveDateTime, Utc};
 
 use crate::error::ShopsterError;
 use crate::postgresql::dborder::DbOrder;
-use crate::postgresql::dborder::OrderStatus;
+use crate::postgresql::dborder::DbOrderStatus;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum OrderStatus {
+    New,
+    InProgress,
+    ReadyToShip,
+    Shipping,
+    Done,
+}
+
+impl From<DbOrderStatus> for OrderStatus {
+    fn from(status: DbOrderStatus) -> Self {
+        match status {
+            DbOrderStatus::New => OrderStatus::New,
+            DbOrderStatus::InProgress => OrderStatus::InProgress,
+            DbOrderStatus::ReadyToShip => OrderStatus::ReadyToShip,
+            DbOrderStatus::Shipping => OrderStatus::Shipping,
+            DbOrderStatus::Done => OrderStatus::Done,
+        }
+    }
+}
+
+impl From<OrderStatus> for DbOrderStatus {
+    fn from(status: OrderStatus) -> Self {
+        match status {
+            OrderStatus::New => DbOrderStatus::New,
+            OrderStatus::InProgress => DbOrderStatus::InProgress,
+            OrderStatus::ReadyToShip => DbOrderStatus::ReadyToShip,
+            OrderStatus::Shipping => DbOrderStatus::Shipping,
+            OrderStatus::Done => DbOrderStatus::Done,
+        }
+    }
+}
 
 
 pub struct Order {
@@ -20,7 +53,7 @@ impl From<&DbOrder> for Order {
     fn from(db_order: &DbOrder) -> Self {
         Order {
             id: db_order.id,
-            status: db_order.status,
+            status: db_order.status.into(),
             delivery_address: db_order.delivery_address.clone(),
             billing_address: db_order.billing_address.clone(),
             created_at: db_order.created_at,
@@ -33,7 +66,7 @@ impl From<&Order> for DbOrder {
     fn from(order: &Order) -> Self {
         DbOrder {
             id: order.id,
-            status: order.status,
+            status: order.status.into(),
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
             created_at: Utc::now().naive_utc(),

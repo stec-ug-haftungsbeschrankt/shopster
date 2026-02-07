@@ -19,8 +19,8 @@ use crate::schema::*;
 use crate::aquire_database;
 
 #[derive(Debug, AsExpression, FromSqlRow, Serialize, Deserialize, PartialEq, PartialOrd, Copy, Clone)]
-#[diesel(sql_type = crate::schema::sql_types::Orderstatus)]
-pub enum OrderStatus {
+#[diesel(sql_type = crate::schema::sql_types::DbOrderStatus)]
+pub enum DbOrderStatus {
     New,
     InProgress,
     ReadyToShip,
@@ -28,58 +28,58 @@ pub enum OrderStatus {
     Done
 }
 
-impl fmt::Display for OrderStatus {
+impl fmt::Display for DbOrderStatus {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-impl ToSql<crate::schema::sql_types::Orderstatus, Pg> for OrderStatus {
+impl ToSql<crate::schema::sql_types::DbOrderStatus, Pg> for DbOrderStatus {
     fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
         match *self {
-            OrderStatus::New => out.write_all(b"New")?,
-            OrderStatus::InProgress => out.write_all(b"InProgress")?,
-            OrderStatus::ReadyToShip => out.write_all(b"ReadyToShip")?,
-            OrderStatus::Shipping => out.write_all(b"Shipping")?,
-            OrderStatus::Done => out.write_all(b"Done")?,
+            DbOrderStatus::New => out.write_all(b"New")?,
+            DbOrderStatus::InProgress => out.write_all(b"InProgress")?,
+            DbOrderStatus::ReadyToShip => out.write_all(b"ReadyToShip")?,
+            DbOrderStatus::Shipping => out.write_all(b"Shipping")?,
+            DbOrderStatus::Done => out.write_all(b"Done")?,
         }
         Ok(IsNull::No)
     }
 }
 
-impl FromSql<crate::schema::sql_types::Orderstatus, Pg> for OrderStatus {
+impl FromSql<crate::schema::sql_types::DbOrderStatus, Pg> for DbOrderStatus {
     fn from_sql(bytes: PgValue) -> deserialize::Result<Self> {
         match bytes.as_bytes() {
-            b"New" => Ok(OrderStatus::New),
-            b"InProgress" => Ok(OrderStatus::InProgress),
-            b"ReadyToShip" => Ok(OrderStatus::ReadyToShip),
-            b"Shipping" => Ok(OrderStatus::Shipping),
-            b"Done" => Ok(OrderStatus::Done),
+            b"New" => Ok(DbOrderStatus::New),
+            b"InProgress" => Ok(DbOrderStatus::InProgress),
+            b"ReadyToShip" => Ok(DbOrderStatus::ReadyToShip),
+            b"Shipping" => Ok(DbOrderStatus::Shipping),
+            b"Done" => Ok(DbOrderStatus::Done),
             _ => Err("Unrecognized enum variant".into()),
         }
     }
 }
 
-impl From<&OrderStatus> for i32 {
-    fn from(status: &OrderStatus) -> Self {
+impl From<&DbOrderStatus> for i32 {
+    fn from(status: &DbOrderStatus) -> Self {
         match status {
-            OrderStatus::New => 0,
-            OrderStatus::InProgress => 1,
-            OrderStatus::ReadyToShip => 2,
-            OrderStatus::Shipping => 3,
-            OrderStatus::Done => 4,
+            DbOrderStatus::New => 0,
+            DbOrderStatus::InProgress => 1,
+            DbOrderStatus::ReadyToShip => 2,
+            DbOrderStatus::Shipping => 3,
+            DbOrderStatus::Done => 4,
         }
     }
 }
 
-impl From<i32> for OrderStatus {
+impl From<i32> for DbOrderStatus {
     fn from(status: i32) -> Self {
         match status {
-            0 => OrderStatus::New,
-            1 => OrderStatus::InProgress,
-            2 => OrderStatus::ReadyToShip,
-            3 => OrderStatus::Shipping,
-            4 => OrderStatus::Done,
+            0 => DbOrderStatus::New,
+            1 => DbOrderStatus::InProgress,
+            2 => DbOrderStatus::ReadyToShip,
+            3 => DbOrderStatus::Shipping,
+            4 => DbOrderStatus::Done,
             _ => panic!()
         }
     }
@@ -90,7 +90,7 @@ impl From<i32> for OrderStatus {
 #[diesel(table_name = orders)]
 pub struct DbOrder {
     pub id: i64,
-    pub status: OrderStatus,
+    pub status: DbOrderStatus,
     pub delivery_address: String,
     pub billing_address: String,
     pub created_at: NaiveDateTime,
@@ -100,7 +100,7 @@ pub struct DbOrder {
 #[derive(Debug, Serialize, Deserialize, Insertable)]
 #[diesel(table_name = orders)]
 pub struct InsertableDbOrder {
-    pub status: OrderStatus,
+    pub status: DbOrderStatus,
     pub delivery_address: String,
     pub billing_address: String,
     pub created_at: NaiveDateTime,
@@ -170,6 +170,3 @@ impl DbOrder {
         Ok(res)
     }
 }
-
-
-
