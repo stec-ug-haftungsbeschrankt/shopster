@@ -233,6 +233,7 @@ mod tests {
                 status: OrderStatus::New,
                 delivery_address: "Duffy Duck, Duck road 22, 44444 Duckhousen".to_string(),
                 billing_address: "Duffy Duck, Duck road 22, 44444 Duckhousen".to_string(),
+                items: Vec::new(),
                 created_at: Default::default(),
                 updated_at: None,
             };

@@ -37,6 +37,27 @@ diesel::table! {
 }
 
 diesel::table! {
+    order_items (id) {
+        id -> Int8,
+        order_id -> Int8,
+        product_id -> Int8,
+        quantity -> Int8,
+        article_number -> Text,
+        gtin -> Text,
+        title -> Text,
+        short_description -> Text,
+        description -> Text,
+        tags -> Text,
+        title_image -> Text,
+        additional_images -> Text,
+        price -> Int8,
+        currency -> Text,
+        weight -> Int4,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::DbOrderStatus;
 
@@ -92,11 +113,13 @@ diesel::table! {
 }
 
 diesel::joinable!(basketproducts -> baskets (basket_id));
+diesel::joinable!(order_items -> orders (order_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     basketproducts,
     baskets,
     customers,
+    order_items,
     orders,
     products,
     settings,

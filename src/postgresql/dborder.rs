@@ -119,6 +119,93 @@ impl From<&DbOrder> for InsertableDbOrder {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
+#[diesel(table_name = order_items)]
+pub struct DbOrderItem {
+    pub id: i64,
+    pub order_id: i64,
+    pub product_id: i64,
+    pub quantity: i64,
+    pub article_number: String,
+    pub gtin: String,
+    pub title: String,
+    pub short_description: String,
+    pub description: String,
+    pub tags: String,
+    pub title_image: String,
+    pub additional_images: String,
+    pub price: i64,
+    pub currency: String,
+    pub weight: i32,
+    pub created_at: NaiveDateTime,
+}
+
+#[derive(Debug, Serialize, Deserialize, Insertable)]
+#[diesel(table_name = order_items)]
+pub struct InsertableDbOrderItem {
+    pub order_id: i64,
+    pub product_id: i64,
+    pub quantity: i64,
+    pub article_number: String,
+    pub gtin: String,
+    pub title: String,
+    pub short_description: String,
+    pub description: String,
+    pub tags: String,
+    pub title_image: String,
+    pub additional_images: String,
+    pub price: i64,
+    pub currency: String,
+    pub weight: i32,
+    pub created_at: NaiveDateTime,
+}
+
+impl From<&DbOrderItem> for InsertableDbOrderItem {
+    fn from(item: &DbOrderItem) -> Self {
+        InsertableDbOrderItem {
+            order_id: item.order_id,
+            product_id: item.product_id,
+            quantity: item.quantity,
+            article_number: item.article_number.clone(),
+            gtin: item.gtin.clone(),
+            title: item.title.clone(),
+            short_description: item.short_description.clone(),
+            description: item.description.clone(),
+            tags: item.tags.clone(),
+            title_image: item.title_image.clone(),
+            additional_images: item.additional_images.clone(),
+            price: item.price,
+            currency: item.currency.clone(),
+            weight: item.weight,
+            created_at: item.created_at,
+        }
+    }
+}
+
+impl DbOrderItem {
+    pub fn get_for_order(tenant_id: Uuid, order_id: i64) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let items = order_items::table
+            .filter(order_items::order_id.eq(order_id))
+            .get_results(&mut connection)?;
+        Ok(items)
+    }
+
+    pub fn create_for_order(tenant_id: Uuid, items: Vec<DbOrderItem>) -> Result<Vec<Self>, ShopsterError> {
+        if items.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut connection = aquire_database(tenant_id)?;
+        let insertables: Vec<InsertableDbOrderItem> = items.iter().map(InsertableDbOrderItem::from).collect();
+        let db_items = diesel::insert_into(order_items::table)
+            .values(insertables)
+            .get_results(&mut connection)?;
+        Ok(db_items)
+    }
+}
+
 
 
 impl DbOrder {
