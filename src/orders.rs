@@ -1,3 +1,4 @@
+use std::fmt;
 use uuid::Uuid;
 use chrono::{NaiveDateTime, Utc};
 
@@ -12,6 +13,12 @@ pub enum OrderStatus {
     ReadyToShip,
     Shipping,
     Done,
+}
+
+impl fmt::Display for OrderStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
 }
 
 impl From<DbOrderStatus> for OrderStatus {
