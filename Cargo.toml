@@ -6,7 +6,7 @@ license = "GPL-3.0-or-later"
 readme = "README.md"
 homepage = "https://stecug.de"
 repository = "https://github.com/stec-ug-haftungsbeschrankt/shopster"
-version = "0.2.15"
+version = "0.2.16"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

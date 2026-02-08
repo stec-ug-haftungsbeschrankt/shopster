@@ -219,6 +219,52 @@ impl Orders {
             updated_at: db_order.updated_at,
         })
     }
+
+    pub fn get_by_customer_id(&self, customer_id: Uuid) -> Result<Vec<Order>, ShopsterError> {
+        let db_orders = DbOrder::get_by_customer_id(self.tenant_id, customer_id)?;
+        let mut orders = Vec::new();
+
+        for db_order in db_orders {
+            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id)?;
+            let items = db_items.iter().map(OrderItemSnapshot::from).collect();
+
+            orders.push(Order {
+                id: db_order.id,
+                customer_id: db_order.customer_id,
+                status: db_order.status.into(),
+                delivery_address: db_order.delivery_address,
+                billing_address: db_order.billing_address,
+                items,
+                created_at: db_order.created_at,
+                updated_at: db_order.updated_at,
+            });
+        }
+
+        Ok(orders)
+    }
+
+    pub fn get_without_customer_id(&self) -> Result<Vec<Order>, ShopsterError> {
+        let db_orders = DbOrder::get_without_customer_id(self.tenant_id)?;
+        let mut orders = Vec::new();
+
+        for db_order in db_orders {
+            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id)?;
+            let items = db_items.iter().map(OrderItemSnapshot::from).collect();
+
+            orders.push(Order {
+                id: db_order.id,
+                customer_id: db_order.customer_id,
+                status: db_order.status.into(),
+                delivery_address: db_order.delivery_address,
+                billing_address: db_order.billing_address,
+                items,
+                created_at: db_order.created_at,
+                updated_at: db_order.updated_at,
+            });
+        }
+
+        Ok(orders)
+    }
     
     pub fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
         let db_order = DbOrder::from(order);

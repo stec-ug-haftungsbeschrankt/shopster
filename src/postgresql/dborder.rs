@@ -229,6 +229,24 @@ impl DbOrder {
         Ok(orders)
     }
 
+    pub fn get_by_customer_id(tenant_id: Uuid, customer_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let orders = orders::table
+            .filter(orders::customer_id.eq(customer_id))
+            .load(&mut connection)?;
+        Ok(orders)
+    }
+
+    pub fn get_without_customer_id(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        let orders = orders::table
+            .filter(orders::customer_id.is_null())
+            .load(&mut connection)?;
+        Ok(orders)
+    }
+
     pub fn create(tenant_id: Uuid, order: DbOrder) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
         
