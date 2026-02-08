@@ -63,6 +63,7 @@ diesel::table! {
 
     orders (id) {
         id -> Int8,
+        customer_id -> Nullable<Uuid>,
         status -> DbOrderStatus,
         delivery_address -> Text,
         billing_address -> Text,
@@ -125,6 +126,7 @@ diesel::table! {
 
 diesel::joinable!(basketproducts -> baskets (basket_id));
 diesel::joinable!(order_items -> orders (order_id));
+diesel::joinable!(orders -> customers (customer_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
     basketproducts,

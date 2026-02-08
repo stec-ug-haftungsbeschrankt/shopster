@@ -132,6 +132,7 @@ impl From<&OrderItemSnapshot> for DbOrderItem {
 
 pub struct Order {
     pub id: i64,
+    pub customer_id: Option<Uuid>,
     pub status: OrderStatus,
     pub delivery_address: String,
     pub billing_address: String,
@@ -144,6 +145,7 @@ impl From<&Order> for DbOrder {
     fn from(order: &Order) -> Self {
         DbOrder {
             id: order.id,
+            customer_id: order.customer_id,
             status: order.status.into(),
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
@@ -188,6 +190,7 @@ impl Orders {
 
             orders.push(Order {
                 id: db_order.id,
+                customer_id: db_order.customer_id,
                 status: db_order.status.into(),
                 delivery_address: db_order.delivery_address,
                 billing_address: db_order.billing_address,
@@ -207,6 +210,7 @@ impl Orders {
 
         Ok(Order {
             id: db_order.id,
+            customer_id: db_order.customer_id,
             status: db_order.status.into(),
             delivery_address: db_order.delivery_address,
             billing_address: db_order.billing_address,
@@ -234,6 +238,7 @@ impl Orders {
 
         Ok(Order {
             id: created_order.id,
+            customer_id: created_order.customer_id,
             status: created_order.status.into(),
             delivery_address: created_order.delivery_address,
             billing_address: created_order.billing_address,
@@ -265,6 +270,7 @@ impl Orders {
 
         Ok(Order {
             id: updated_order.id,
+            customer_id: updated_order.customer_id,
             status: updated_order.status.into(),
             delivery_address: updated_order.delivery_address,
             billing_address: updated_order.billing_address,
@@ -320,6 +326,7 @@ impl Orders {
 
         let order = Order {
             id: 0,
+            customer_id: None,
             status: OrderStatus::New,
             delivery_address,
             billing_address,

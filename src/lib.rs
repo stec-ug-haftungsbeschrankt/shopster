@@ -236,6 +236,7 @@ mod tests {
             let orders = shopster.orders(tenant.id).unwrap();
             let new_order = Order {
                 id: 0,
+                customer_id: None,
                 status: OrderStatus::New,
                 delivery_address: "Duffy Duck, Duck road 22, 44444 Duckhousen".to_string(),
                 billing_address: "Duffy Duck, Duck road 22, 44444 Duckhousen".to_string(),

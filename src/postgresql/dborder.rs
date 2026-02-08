@@ -90,6 +90,7 @@ impl From<i32> for DbOrderStatus {
 #[diesel(table_name = orders)]
 pub struct DbOrder {
     pub id: i64,
+    pub customer_id: Option<Uuid>,
     pub status: DbOrderStatus,
     pub delivery_address: String,
     pub billing_address: String,
@@ -100,6 +101,7 @@ pub struct DbOrder {
 #[derive(Debug, Serialize, Deserialize, Insertable)]
 #[diesel(table_name = orders)]
 pub struct InsertableDbOrder {
+    pub customer_id: Option<Uuid>,
     pub status: DbOrderStatus,
     pub delivery_address: String,
     pub billing_address: String,
@@ -110,6 +112,7 @@ pub struct InsertableDbOrder {
 impl From<&DbOrder> for InsertableDbOrder {
     fn from(order: &DbOrder) -> Self {
         InsertableDbOrder {
+            customer_id: order.customer_id,
             status: order.status,
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
