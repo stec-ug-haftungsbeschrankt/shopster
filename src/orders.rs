@@ -7,6 +7,7 @@ use crate::baskets::Baskets;
 use crate::postgresql::dborder::DbOrder;
 use crate::postgresql::dborder::DbOrderItem;
 use crate::postgresql::dborder::DbOrderStatus;
+use crate::warehouse::Warehouse;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OrderStatus {
@@ -161,6 +162,21 @@ impl Orders {
     pub fn new(tenant_id: Uuid) -> Self {
         Orders { tenant_id }
     }
+
+    fn is_reserving_status(status: OrderStatus) -> bool {
+        matches!(status, OrderStatus::New | OrderStatus::InProgress | OrderStatus::ReadyToShip)
+    }
+
+    fn apply_reserved_delta(&self, items: &[OrderItemSnapshot], delta: i64) -> Result<(), ShopsterError> {
+        let warehouse = Warehouse::new(self.tenant_id);
+
+        for item in items {
+            let item_delta = item.quantity * delta;
+            warehouse.apply_reserved_delta(item.product_id, item_delta)?;
+        }
+
+        Ok(())
+    }
     
     pub fn get_all(&self) -> Result<Vec<Order>, ShopsterError> {
         let db_orders = DbOrder::get_all(self.tenant_id)?;
@@ -209,7 +225,12 @@ impl Orders {
             db_item.order_id = created_order.id;
         }
         let created_items = DbOrderItem::create_for_order(self.tenant_id, db_items)?;
-        let items = created_items.iter().map(OrderItemSnapshot::from).collect();
+        let items: Vec<OrderItemSnapshot> = created_items.iter().map(OrderItemSnapshot::from).collect();
+
+        let created_status: OrderStatus = created_order.status.into();
+        if Self::is_reserving_status(created_status) {
+            self.apply_reserved_delta(&items, 1)?;
+        }
 
         Ok(Order {
             id: created_order.id,
@@ -223,11 +244,24 @@ impl Orders {
     }
     
     pub fn update(&self, order: &Order) -> Result<Order, ShopsterError> {
+        let existing_order = DbOrder::find(self.tenant_id, order.id)?;
+        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order.id)?;
+        let previous_status: OrderStatus = existing_order.status.into();
+        let next_status: OrderStatus = order.status;
+
         let db_order = DbOrder::from(order);
         let updated_order = DbOrder::update(self.tenant_id, order.id, db_order)?;
 
         let db_items = DbOrderItem::get_for_order(self.tenant_id, updated_order.id)?;
         let items = db_items.iter().map(OrderItemSnapshot::from).collect();
+
+        let previous_reserving = Self::is_reserving_status(previous_status);
+        let next_reserving = Self::is_reserving_status(next_status);
+        if previous_reserving != next_reserving {
+            let delta = if next_reserving { 1 } else { -1 };
+            let previous_snapshots: Vec<OrderItemSnapshot> = existing_items.iter().map(OrderItemSnapshot::from).collect();
+            self.apply_reserved_delta(&previous_snapshots, delta)?;
+        }
 
         Ok(Order {
             id: updated_order.id,
@@ -241,6 +275,14 @@ impl Orders {
     }
     
     pub fn remove(&self, order_id: i64) -> Result<bool, ShopsterError> {
+        let existing_order = DbOrder::find(self.tenant_id, order_id)?;
+        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order_id)?;
+        let existing_status: OrderStatus = existing_order.status.into();
+        if Self::is_reserving_status(existing_status) {
+            let existing_snapshots: Vec<OrderItemSnapshot> = existing_items.iter().map(OrderItemSnapshot::from).collect();
+            self.apply_reserved_delta(&existing_snapshots, -1)?;
+        }
+
         let result = DbOrder::delete(self.tenant_id, order_id)?;
         Ok(result > 0)
     }

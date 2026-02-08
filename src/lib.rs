@@ -9,6 +9,7 @@ pub mod customers;
 pub mod products;
 pub mod orders;
 pub mod settings;
+pub mod warehouse;
 pub use orders::OrderStatus;
 
 use diesel::PgConnection;
@@ -32,6 +33,7 @@ use customers::Customers;
 use products::Products;
 use orders::Orders;
 use settings::Settings;
+use warehouse::Warehouse;
 
 
 type Pool = r2d2::Pool<ConnectionManager<PgConnection>>;
@@ -153,6 +155,10 @@ impl Shopster {
     pub fn settings(&self, tenant_id: Uuid) -> Result<Settings, ShopsterError> {
         Ok(Settings::new(tenant_id))
     } 
+
+    pub fn warehouse(&self, tenant_id: Uuid) -> Result<Warehouse, ShopsterError> {
+        Ok(Warehouse::new(tenant_id))
+    }
 }
 
 

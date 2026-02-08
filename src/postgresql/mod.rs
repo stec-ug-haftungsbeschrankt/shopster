@@ -7,6 +7,7 @@ pub mod dborder;
 pub mod dbproduct;
 pub mod dbsettings;
 pub mod dbtag;
+pub mod dbwarehouse;
 
 pub struct DatabaseHelper;
 

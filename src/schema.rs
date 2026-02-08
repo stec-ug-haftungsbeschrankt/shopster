@@ -91,6 +91,17 @@ diesel::table! {
 }
 
 diesel::table! {
+    warehouse (id) {
+        id -> Int8,
+        product_id -> Int8,
+        in_stock -> Int8,
+        reserved -> Int8,
+        created_at -> Timestamp,
+        updated_at -> Nullable<Timestamp>,
+    }
+}
+
+diesel::table! {
     settings (id) {
         id -> Int4,
         title -> Text,
@@ -123,5 +134,6 @@ diesel::allow_tables_to_appear_in_same_query!(
     orders,
     products,
     settings,
+    warehouse,
     users,
 );
