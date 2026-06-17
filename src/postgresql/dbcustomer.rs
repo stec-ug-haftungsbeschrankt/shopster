@@ -11,7 +11,6 @@ use crate::ShopsterError;
 use crate::schema::*;
 use crate::aquire_database;
 use argon2::Config;
-use rand::Rng;
 
 
 #[derive(Serialize, Deserialize, PartialEq, AsChangeset)]
@@ -132,7 +131,7 @@ impl DbCustomer {
     }
 
     pub fn hash_password(&mut self) -> Result<(), ShopsterError> {
-        let salt: [u8; 32] = rand::rng().random();
+        let salt: [u8; 32] = rand::random();
         // Alternative would be the low_memory variant. Can be time consuming.
         // See https://github.com/sru-systems/rust-argon2/issues/52
         let config = Config::original(); 
