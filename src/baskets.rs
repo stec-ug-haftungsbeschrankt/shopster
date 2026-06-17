@@ -1,13 +1,37 @@
+//! Shopping basket management for customers.
+//!
+//! This module provides functionality for managing shopping baskets, including:
+//! - Creating and deleting baskets
+//! - Adding and removing products from baskets
+//! - Calculating basket totals
+//! - Merging baskets
+//!
+//! # Example
+//!
+//! ```ignore
+//! let baskets = shopster.baskets(tenant_id)?;
+//! let basket_id = baskets.add_basket()?;
+//! baskets.add_product_to_basket(basket_id, product_id, 2)?;
+//! let basket = baskets.get_basket(basket_id)?;
+//! let (total, currency) = baskets.calculate_basket_total(basket_id)?;
+//! ```
+
 use uuid::Uuid;
 use chrono::NaiveDateTime;
 
 use crate::{postgresql::dbbasket::DbBasket, error::ShopsterError};
 use crate::postgresql::dbbasket::DbBasketProduct;
 
+/// A product within a shopping basket.
+///
+/// Represents a product line item in a basket with quantity information.
 #[derive(Clone)]
 pub struct BasketProduct {
+    /// Unique identifier for this basket-product entry
     pub id: i64,
+    /// The product's ID
     pub product_id: i64,
+    /// Quantity of the product in the basket
     pub quantity: i64
 }
 
@@ -21,10 +45,17 @@ impl From<&DbBasketProduct> for BasketProduct {
     }
 }
 
+/// A shopping basket.
+///
+/// Contains the ID, product list, and timestamps for a customer's shopping cart.
 pub struct Basket {
+    /// Unique identifier for the basket
     pub id: Uuid,
+    /// Products in this basket
     pub products: Vec<BasketProduct>,
+    /// When the basket was created
     pub created_at: NaiveDateTime,
+    /// When the basket was last updated (if applicable)
     pub updated_at: Option<NaiveDateTime>
 }
 
@@ -49,21 +80,44 @@ impl From<&Basket> for DbBasket {
     }
 }
 
+/// A basket product with full product details.
+///
+/// Used when you need to display complete product information alongside
+/// basket quantity information.
 pub struct BasketProductWithDetails {
+    /// The ID of the basket-product entry
     pub basket_product_id: i64,
+    /// Quantity of this product in the basket
     pub quantity: i64,
+    /// Full product details
     pub product: crate::products::Product
 }
 
+/// Handler for shopping basket operations.
+///
+/// Manages all basket-related operations for a tenant, including CRUD operations
+/// on baskets and the products within them.
 pub struct Baskets {
+    /// The tenant ID for tenant isolation
     tenant_id: Uuid
 }
 
 impl Baskets {
+    /// Creates a new Baskets handler for a tenant.
+    ///
+    /// # Arguments
+    ///
+    /// * `tenant_id` - The tenant's UUID
     pub fn new(tenant_id: Uuid) -> Self {
         Baskets { tenant_id }
     }
 
+    /// Retrieves all baskets for the tenant.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<Basket>)` - All baskets with their products loaded
+    /// `Err(ShopsterError)` - If the database operation fails
     pub fn get_all_baskets(&self) -> Result<Vec<Basket>, ShopsterError> {
         let db_baskets = DbBasket::get_all(self.tenant_id)?;
         let mut baskets = Vec::new();
@@ -78,6 +132,16 @@ impl Baskets {
         Ok(baskets)
     }
 
+    /// Gets a specific basket by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `basket_id` - The basket's UUID
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Basket)` - The basket with products loaded
+    /// `Err(ShopsterError)` - If basket not found or database operation fails
     pub fn get_basket(&self, basket_id: Uuid) -> Result<Basket, ShopsterError> {
         let db_basket = DbBasket::find(self.tenant_id, basket_id)?;
         let mut basket = Basket::from(&db_basket);
@@ -85,17 +149,45 @@ impl Baskets {
         Ok(basket)
     }
     
+    /// Creates a new empty basket.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Uuid)` - The ID of the newly created basket
+    /// `Err(ShopsterError)` - If creation fails
     pub fn add_basket(&self) -> Result<Uuid, ShopsterError> {
         let db_basket = DbBasket::create(self.tenant_id)?;
         Ok(db_basket.id)
     }
     
+    /// Deletes a basket and all its products.
+    ///
+    /// # Arguments
+    ///
+    /// * `basket_id` - The basket's UUID
+    ///
+    /// # Returns
+    ///
+    /// `Ok(bool)` - True if basket was deleted, false if not found
+    /// `Err(ShopsterError)` - If operation fails
     pub fn delete_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
         self.clear_basket(basket_id)?;
         let deleted_baskets = DbBasket::delete(self.tenant_id, basket_id)?;
         Ok(deleted_baskets > 0)
     }
 
+    /// Adds a product to a basket or updates quantity if already present.
+    ///
+    /// # Arguments
+    ///
+    /// * `basket_id` - The basket's UUID
+    /// * `product_id` - The product to add
+    /// * `quantity` - Quantity to add (replaces if product already exists)
+    ///
+    /// # Returns
+    ///
+    /// `Ok(i64)` - The ID of the basket-product entry
+    /// `Err(ShopsterError)` - If operation fails
     pub fn add_product_to_basket(&self, basket_id: Uuid, product_id: i64, quantity: i64) -> Result<i64, ShopsterError> {
         let items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id)?;
 
@@ -148,6 +240,19 @@ impl Baskets {
         Ok(items)
     }
     
+    /// Gets all basket products with full product details.
+    ///
+    /// Loads complete product information for each item in the basket,
+    /// useful for rendering checkout pages.
+    ///
+    /// # Arguments
+    ///
+    /// * `basket_id` - The basket's UUID
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<BasketProductWithDetails>)` - Products with full details
+    /// `Err(ShopsterError)` - If operation fails
     pub fn get_products_with_details(&self, basket_id: Uuid) -> Result<Vec<BasketProductWithDetails>, ShopsterError> {
         // Hole alle Produkte im Warenkorb
         let basket_products = DbBasketProduct::get_basket_items(self.tenant_id, basket_id)?;
@@ -170,12 +275,34 @@ impl Baskets {
         Ok(result)
     }
 
+    /// Removes all products from a basket without deleting the basket itself.
+    ///
+    /// # Arguments
+    ///
+    /// * `basket_id` - The basket's UUID
+    ///
+    /// # Returns
+    ///
+    /// `Ok(bool)` - True if any items were cleared, false if basket was empty
+    /// `Err(ShopsterError)` - If operation fails
     pub fn clear_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
         DbBasket::find(self.tenant_id, basket_id)?;
         let result = DbBasketProduct::delete_all_basket_items(self.tenant_id, basket_id)?;
         Ok(result > 0)
     }
     
+    /// Calculates the total cost of all products in a basket.
+    ///
+    /// Returns both the total amount (in cents) and the currency code.
+    ///
+    /// # Arguments
+    ///
+    /// * `basket_id` - The basket's UUID
+    ///
+    /// # Returns
+    ///
+    /// `Ok((i64, String))` - Tuple of (amount in cents, currency code)
+    /// `Err(ShopsterError)` - If operation fails
     pub fn calculate_basket_total(&self, basket_id: Uuid) -> Result<(i64, String), ShopsterError> {
         let products_with_details = self.get_products_with_details(basket_id)?;
 
@@ -201,6 +328,21 @@ impl Baskets {
     }
 
 
+    /// Merges the contents of a source basket into a target basket.
+    ///
+    /// All products from the source basket are moved to the target basket.
+    /// If a product already exists in the target, quantities are summed.
+    /// The source basket is deleted after merging.
+    ///
+    /// # Arguments
+    ///
+    /// * `source_basket_id` - The basket to merge from
+    /// * `target_basket_id` - The basket to merge into
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` - If merge succeeds
+    /// `Err(ShopsterError)` - If operation fails
     pub fn merge_baskets(&self, source_basket_id: Uuid, target_basket_id: Uuid) -> Result<(), ShopsterError> {
         // Lade die Produkte aus dem Quell-Warenkorb
         let source_products = self.get_products_from_basket(source_basket_id)?;

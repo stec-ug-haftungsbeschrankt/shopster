@@ -1,3 +1,15 @@
+//! Product catalog management.
+//!
+//! This module handles product CRUD operations, pricing, images, and tags.
+//! Products are the core items available for purchase in the shop.
+//!
+//! # Example
+//!
+//! ```ignore
+//! let products = shopster.products(tenant_id)?;
+//! let product = products.insert(&Product { ... })?;
+//! let all = products.get_all()?;
+//! ```
 
 use crate::error::ShopsterError;
 use crate::postgresql::dbproduct::DbProduct;
@@ -5,26 +17,45 @@ use chrono::{NaiveDateTime, Utc};
 use serde_derive::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Product pricing information.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Price {
+    /// Price amount in cents (to avoid floating point issues)
     pub amount: i64,
+    /// Currency code (e.g., "EUR", "USD")
     pub currency: String
 }
 
+/// A product in the catalog.
+///
+/// Represents an item available for sale, including pricing, images, and metadata.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Product {
+    /// Unique product identifier
     pub id: i64,
+    /// Internal article number/SKU
     pub article_number: String,
+    /// Global Trade Item Number (barcode)
     pub gtin: String,
+    /// Product display title
     pub title: String,
+    /// Brief product description for listings
     pub short_description: String,
+    /// Full product description
     pub description: String,
+    /// Product tags/categories
     pub tags: Vec<String>,
+    /// URL to the main product image
     pub image_url: String,
+    /// URLs to additional product images
     pub additional_images: Vec<String>,
+    /// Product pricing (if available)
     pub price: Option<Price>,
+    /// Product weight in grams
     pub weight: i64,
+    /// When the product was created
     pub created_at: NaiveDateTime,
+    /// When the product was last updated
     pub updated_at: Option<NaiveDateTime>,
 }
 
@@ -79,27 +110,62 @@ impl From<&Product> for DbProduct {
 }
 
 
+/// Handler for product management operations.
+///
+/// Provides CRUD operations and search capabilities for products within a tenant.
 pub struct Products {
+    /// The tenant ID for tenant isolation
     tenant_id: Uuid
 }
 
 impl Products {
+    /// Creates a new Products handler for a tenant.
+    ///
+    /// # Arguments
+    ///
+    /// * `tenant_id` - The tenant's UUID
     pub fn new(tenant_id: Uuid) -> Self {
         Products { tenant_id }
     }
     
+    /// Retrieves all products for the tenant.
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Vec<Product>)` - All products
+    /// `Err(ShopsterError)` - If database error occurs
     pub fn get_all(&self) -> Result<Vec<Product>, ShopsterError> {
         let db_products = DbProduct::get_all(self.tenant_id)?;
         let products = db_products.iter().map(Product::from).collect();
         Ok(products)
     }
     
+    /// Retrieves a specific product by ID.
+    ///
+    /// # Arguments
+    ///
+    /// * `product_id` - The product's ID
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Product)` - The product
+    /// `Err(ShopsterError)` - If not found or database error
     pub fn get(&self, product_id: i64) -> Result<Product, ShopsterError> {
         let db_product = DbProduct::find(self.tenant_id, product_id)?;
         let product = Product::from(&db_product);
         Ok(product)
     }
     
+    /// Creates a new product.
+    ///
+    /// # Arguments
+    ///
+    /// * `product` - The product to insert
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Product)` - The created product
+    /// `Err(ShopsterError)` - If creation fails
     pub fn insert(&self, product: &Product) -> Result<Product, ShopsterError> {
         let db_product = DbProduct::from(product);
         let created_product = DbProduct::create(self.tenant_id, db_product)?;
@@ -108,6 +174,16 @@ impl Products {
         Ok(reply)
     }
     
+    /// Updates an existing product.
+    ///
+    /// # Arguments
+    ///
+    /// * `product` - The product with updated data
+    ///
+    /// # Returns
+    ///
+    /// `Ok(Product)` - The updated product
+    /// `Err(ShopsterError)` - If update fails
     pub fn update(&self, product: &Product) -> Result<Product, ShopsterError> {
         let db_product = DbProduct::from(product);
         let updated_product = DbProduct::update(self.tenant_id, product.id, db_product)?;

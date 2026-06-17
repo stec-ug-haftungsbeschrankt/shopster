@@ -1,3 +1,16 @@
+//! Order management and processing.
+//!
+//! This module handles order CRUD operations, status tracking, and order item management.
+//! Orders represent completed purchases with delivery and billing information.
+//!
+//! # Example
+//!
+//! ```ignore
+//! let orders = shopster.orders(tenant_id)?;
+//! let order = orders.insert(&Order { ... })?;
+//! let all = orders.get_all()?;
+//! ```
+
 use std::fmt;
 use uuid::Uuid;
 use chrono::{NaiveDateTime, Utc};
@@ -9,12 +22,20 @@ use crate::postgresql::dborder::DbOrderItem;
 use crate::postgresql::dborder::DbOrderStatus;
 use crate::warehouse::Warehouse;
 
+/// The lifecycle status of an order.
+///
+/// Tracks the progression of an order from creation through delivery.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OrderStatus {
+    /// Order has been created but not yet processed
     New,
+    /// Order is being processed/picked
     InProgress,
+    /// Order is ready to ship
     ReadyToShip,
+    /// Order is in transit
     Shipping,
+    /// Order has been delivered
     Done,
 }
 
@@ -48,15 +69,26 @@ impl From<OrderStatus> for DbOrderStatus {
     }
 }
 
+/// Price information captured in an order item.
+///
+/// Frozen at the time of order to preserve historical pricing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderItemPrice {
+    /// Price amount in cents
     pub amount: i64,
+    /// Currency code at time of order
     pub currency: String,
 }
 
+/// A snapshot of a product as it was at order time.
+///
+/// Captured to preserve product information at order time,
+/// even if the product is later modified or deleted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderItemSnapshot {
+    /// Item ID
     pub id: i64,
+    /// Product ID (may no longer exist)
     pub product_id: i64,
     pub quantity: i64,
     pub article_number: String,
@@ -130,14 +162,26 @@ impl From<&OrderItemSnapshot> for DbOrderItem {
     }
 }
 
+/// A complete order.
+///
+/// Represents a customer purchase with delivery address, billing address,
+/// and a list of items ordered.
 pub struct Order {
+    /// Unique order identifier
     pub id: i64,
+    /// Customer ID if account holder, None for guest checkout
     pub customer_id: Option<Uuid>,
+    /// Current order status
     pub status: OrderStatus,
+    /// Delivery address
     pub delivery_address: String,
+    /// Billing address
     pub billing_address: String,
+    /// Items in the order
     pub items: Vec<OrderItemSnapshot>,
+    /// When order was created
     pub created_at: NaiveDateTime,
+    /// Last update time
     pub updated_at: Option<NaiveDateTime>,
 }
 
@@ -156,11 +200,21 @@ impl From<&Order> for DbOrder {
 }
 
 
-pub struct Orders { 
+/// Handler for order management operations.
+///
+/// Provides CRUD operations and status tracking for orders within a tenant.
+/// Automatically handles inventory reservation when orders transition to certain statuses.
+pub struct Orders {
+    /// The tenant ID for tenant isolation
     tenant_id: Uuid
 }
 
 impl Orders {
+    /// Creates a new Orders handler for a tenant.
+    ///
+    /// # Arguments
+    ///
+    /// * `tenant_id` - The tenant's UUID
     pub fn new(tenant_id: Uuid) -> Self {
         Orders { tenant_id }
     }
