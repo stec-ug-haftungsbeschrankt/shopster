@@ -75,6 +75,10 @@ pub mod settings;
 pub mod warehouse;
 pub use orders::OrderStatus;
 
+// Export DbOrderStatus for tests only - hidden from public documentation
+#[doc(hidden)]
+pub use postgresql::dborder::DbOrderStatus;
+
 use diesel::PgConnection;
 use diesel::r2d2;
 use diesel::r2d2::ConnectionManager;

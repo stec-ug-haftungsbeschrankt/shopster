@@ -110,7 +110,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Warehouse management
     println!("\n=== Warehouse Management ===");
-    use shopster::warehouse::WarehouseItem;
+    use stec_shopster::warehouse::WarehouseItem;
 
     let laptop_stock = WarehouseItem {
         id: 0,

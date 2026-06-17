@@ -10,7 +10,6 @@
 use stec_shopster::{Shopster, DatabaseSelector, customers::Customer};
 use stec_tenet::{Tenet, encryption_modes::EncryptionModes};
 use uuid::Uuid;
-use std::str::FromStr;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     simple_logger::init_with_env().ok();
@@ -31,7 +30,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         id: Uuid::new_v4(),
         email: "john.doe@example.com".to_string(),
         email_verified: false,
-        encryption_mode: EncryptionModes::from_str("Argon2")?,
+        encryption_mode: EncryptionModes::Argon2,
         password: "securepassword123".to_string(),
         full_name: "John Doe".to_string(),
         created_at: chrono::Utc::now().naive_utc(),
