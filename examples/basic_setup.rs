@@ -5,12 +5,12 @@
 //! - Initializing a database selector
 //! - Setting up the Shopster instance
 
-use shopster::{Shopster, DatabaseSelector};
+use stec_shopster::{Shopster, DatabaseSelector};
 use stec_tenet::Tenet;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize logging
-    simple_logger::init_by_env().ok();
+    simple_logger::init_with_env().ok();
 
     // Connection strings (in production, load from environment)
     let tenet_db = "postgres://postgres:postgres@localhost/tenet_db";

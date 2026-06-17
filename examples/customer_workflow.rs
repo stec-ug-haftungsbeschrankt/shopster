@@ -7,13 +7,13 @@
 //! - Password management
 //! - Email verification
 
-use shopster::{Shopster, DatabaseSelector, customers::Customer};
+use stec_shopster::{Shopster, DatabaseSelector, customers::Customer};
 use stec_tenet::{Tenet, encryption_modes::EncryptionModes};
 use uuid::Uuid;
 use std::str::FromStr;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    simple_logger::init_by_env().ok();
+    simple_logger::init_with_env().ok();
 
     let tenet_db = "postgres://postgres:postgres@localhost/tenet_db";
     let shopster_db = "postgres://postgres:postgres@localhost/shopster_db";

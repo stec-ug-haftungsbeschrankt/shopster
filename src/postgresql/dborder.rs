@@ -12,6 +12,7 @@ use diesel::pg::{Pg, PgValue};
 use diesel::serialize::{self, IsNull, Output, ToSql};
 use std::fmt;
 use std::io::Write;
+use std::convert::TryFrom;
 use uuid::Uuid;
 
 use crate::ShopsterError;
@@ -72,15 +73,17 @@ impl From<&DbOrderStatus> for i32 {
     }
 }
 
-impl From<i32> for DbOrderStatus {
-    fn from(status: i32) -> Self {
+impl TryFrom<i32> for DbOrderStatus {
+    type Error = String;
+
+    fn try_from(status: i32) -> Result<Self, Self::Error> {
         match status {
-            0 => DbOrderStatus::New,
-            1 => DbOrderStatus::InProgress,
-            2 => DbOrderStatus::ReadyToShip,
-            3 => DbOrderStatus::Shipping,
-            4 => DbOrderStatus::Done,
-            _ => panic!()
+            0 => Ok(DbOrderStatus::New),
+            1 => Ok(DbOrderStatus::InProgress),
+            2 => Ok(DbOrderStatus::ReadyToShip),
+            3 => Ok(DbOrderStatus::Shipping),
+            4 => Ok(DbOrderStatus::Done),
+            _ => Err(format!("Unknown order status: {}", status))
         }
     }
 }

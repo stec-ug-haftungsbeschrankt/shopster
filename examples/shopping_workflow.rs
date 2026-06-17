@@ -7,12 +7,12 @@
 //! - Merging baskets
 //! - Checkout operations
 
-use shopster::{Shopster, DatabaseSelector, products::Product, products::Price};
+use stec_shopster::{Shopster, DatabaseSelector, products::Product, products::Price};
 use stec_tenet::Tenet;
 use uuid::Uuid;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    simple_logger::init_by_env().ok();
+    simple_logger::init_with_env().ok();
 
     let tenet_db = "postgres://postgres:postgres@localhost/tenet_db";
     let shopster_db = "postgres://postgres:postgres@localhost/shopster_db";
