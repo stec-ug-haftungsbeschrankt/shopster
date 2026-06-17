@@ -18,7 +18,7 @@ use serde_derive::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Product pricing information.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Price {
     /// Price amount in cents (to avoid floating point issues)
     pub amount: i64,
@@ -29,7 +29,7 @@ pub struct Price {
 /// A product in the catalog.
 ///
 /// Represents an item available for sale, including pricing, images, and metadata.
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Product {
     /// Unique product identifier
     pub id: i64,
