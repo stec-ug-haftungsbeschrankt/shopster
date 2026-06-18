@@ -17,7 +17,7 @@ use stec_tenet::encryption_modes::EncryptionModes;
 use uuid::Uuid;
 use chrono::{NaiveDateTime, Utc};
 use crate::error::ShopsterError;
-use crate::postgresql::dbcustomer::{DbCustomer, DbCustomerMessage};
+use crate::postgresql::dbcustomer::{DbCustomer, DbCustomerMessage, DbProfileMessage};
 
 
 /// A customer in the shop system.
@@ -44,6 +44,13 @@ pub struct Customer {
     pub updated_at: Option<NaiveDateTime>,
 }
 
+/// Profile fields that can be changed via `Customers::update()`.
+/// Password is intentionally absent — use `change_password` or `reset_password`.
+pub struct CustomerProfile {
+    pub email: String,
+    pub email_verified: bool,
+    pub full_name: String,
+}
 
 impl From<&DbCustomer> for Customer {
     fn from(db_customer: &DbCustomer) -> Self {
@@ -83,6 +90,16 @@ impl From<&Customer> for DbCustomerMessage {
             algorithm: customer.encryption_mode.to_string(),
             password: customer.password.clone(),
             full_name: customer.full_name.clone(),
+        }
+    }
+}
+
+impl From<&CustomerProfile> for DbProfileMessage {
+    fn from(profile: &CustomerProfile) -> Self {
+        DbProfileMessage {
+            email: profile.email.clone(),
+            email_verified: profile.email_verified,
+            full_name: profile.full_name.clone(),
         }
     }
 }
@@ -169,22 +186,24 @@ impl Customers {
         Ok(reply)
     }
     
-    /// Updates an existing customer.
+    /// Updates the profile fields of an existing customer.
+    ///
+    /// Password is never modified by this method. Use `change_password` or
+    /// `reset_password` for password changes.
     ///
     /// # Arguments
     ///
-    /// * `customer` - The customer with updated data
+    /// * `customer_id` - The customer to update
+    /// * `profile` - The new profile values
     ///
     /// # Returns
     ///
     /// `Ok(Customer)` - The updated customer
     /// `Err(ShopsterError)` - If update fails
-    pub fn update(&self, customer: &Customer) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomerMessage::from(customer);
-        let updated_customer = DbCustomer::update(self.tenant_id, customer.id, db_customer)?;
-
-        let reply = Customer::from(&updated_customer);
-        Ok(reply)
+    pub fn update(&self, customer_id: Uuid, profile: &CustomerProfile) -> Result<Customer, ShopsterError> {
+        let db_profile = DbProfileMessage::from(profile);
+        let updated_customer = DbCustomer::update(self.tenant_id, customer_id, db_profile)?;
+        Ok(Customer::from(&updated_customer))
     }
     
     /// Deletes a customer.
@@ -273,11 +292,7 @@ impl Customers {
         db_customer.password = new_password.to_string();
         db_customer.hash_password()?;
 
-        // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
-        let customer_message = DbCustomerMessage::from(&db_customer);
-
-        // Aktualisiere den Kunden in der Datenbank
-        DbCustomer::update(self.tenant_id, customer_id, customer_message)?;
+        DbCustomer::update_password(self.tenant_id, customer_id, &db_customer.password, &db_customer.algorithm)?;
 
         Ok(true)
     }
@@ -300,11 +315,7 @@ impl Customers {
         db_customer.password = new_password.to_string();
         db_customer.hash_password()?;
 
-        // Erstelle eine aktualisierte Version des Kunden mit dem neuen Passwort
-        let customer_message = DbCustomerMessage::from(&db_customer);
-
-        // Aktualisiere den Kunden in der Datenbank
-        DbCustomer::update(self.tenant_id, db_customer.id, customer_message)?;
+        DbCustomer::update_password(self.tenant_id, db_customer.id, &db_customer.password, &db_customer.algorithm)?;
 
         Ok(true)
     }
@@ -338,12 +349,13 @@ impl Customers {
         // Finde den Kunden
         let db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
 
-        // Erstelle eine aktualisierte Version des Kunden mit verifizierter E-Mail
-        let mut customer_message = DbCustomerMessage::from(&db_customer);
-        customer_message.email_verified = true;
+        let profile = DbProfileMessage {
+            email: db_customer.email.clone(),
+            email_verified: true,
+            full_name: db_customer.full_name.clone(),
+        };
 
-        // Aktualisiere den Kunden in der Datenbank
-        let updated_db_customer = DbCustomer::update(self.tenant_id, customer_id, customer_message)?;
+        let updated_db_customer = DbCustomer::update(self.tenant_id, customer_id, profile)?;
 
         // Konvertiere den aktualisierten Kunden und gib ihn zurück
         let customer = Customer::from(&updated_db_customer);

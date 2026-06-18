@@ -29,44 +29,6 @@ This document presents a comprehensive technical analysis of the Shopster projec
 
 ## High-Priority Issues
 
-### 4. **Missing Password Re-hashing on Update** 🔴 HIGH - Security Issue
-**File:** `src/postgresql/dbcustomer.rs` (lines 112-114)  
-**Severity:** HIGH - Security vulnerability  
-
-**Issue:**
-```rust
-// dbcustomer.rs - Customer update path
-pub fn update(&mut self, customer: &DbCustomer) -> Result<DbCustomer, ShopsterError> {
-    // Updates email, name, etc., but checks:
-    // password field is taken as-is from input
-    diesel::update(customers::table.find(&customer.id))
-        .set((
-            customers::email.eq(&customer.email),
-            customers::full_name.eq(&customer.full_name),
-            customers::password.eq(&customer.password),  // Not re-hashed!
-            // ...
-        ))
-        .get_result(&mut self.connection)?
-}
-```
-
-**Problem:** When a customer is updated, if the password field is provided, it's stored as-is without re-hashing. This means:
-- If someone calls `update()` with plaintext password, it gets stored as plaintext
-- Different code paths for insertion (hashes) vs update (may not hash) create inconsistency
-
-**Impact:** Security vulnerability; plaintext passwords could be stored; authentication could break
-
-**Fix:** Add password hashing logic to update:
-```rust
-let final_password = if customer.password == original.password {
-    customer.password.clone()  // Unchanged, keep hashed
-} else {
-    hash_password(&customer.password)?  // New password, hash it
-};
-```
-
----
-
 ### 5. **No Valid Order Status Transitions Validation** 🔴 HIGH - Logic Bug
 **File:** `src/orders.rs` (lines 222-224)  
 **Severity:** HIGH - Allows invalid state transitions  

@@ -13,13 +13,22 @@ use crate::aquire_database;
 use argon2::Config;
 
 
-#[derive(Serialize, Deserialize, PartialEq, AsChangeset)]
-#[diesel(table_name = customers)]
+/// Full message type used only for customer creation (includes password).
+#[derive(Serialize, Deserialize, PartialEq)]
 pub struct DbCustomerMessage {
     pub email: String,
     pub email_verified: bool,
     pub password: String,
     pub algorithm: String,
+    pub full_name: String,
+}
+
+/// Partial update type for profile fields — never touches password/algorithm columns.
+#[derive(Serialize, Deserialize, PartialEq, AsChangeset)]
+#[diesel(table_name = customers)]
+pub struct DbProfileMessage {
+    pub email: String,
+    pub email_verified: bool,
     pub full_name: String,
 }
 
@@ -106,23 +115,29 @@ impl DbCustomer {
         Ok(db_customer)
     }
 
-    pub fn update(tenant_id: Uuid, id: Uuid, mut customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
+    pub fn update(tenant_id: Uuid, id: Uuid, profile: DbProfileMessage) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
-
-        // Hash the password if it is not already an argon2 hash. Callers like
-        // change_password/reset_password pre-hash before calling us; the general
-        // update path may receive plaintext from the caller.
-        if !customer.password.starts_with("$argon2") {
-            let salt: [u8; 32] = rand::random();
-            let config = Config::original();
-            customer.password = argon2::hash_encoded(customer.password.as_bytes(), &salt, &config)?;
-        }
 
         let customer = diesel::update(customers::table)
             .filter(customers::id.eq(id))
-            .set(customer)
+            .set(profile)
             .get_result(&mut connection)?;
         Ok(customer)
+    }
+
+    /// Updates only the hashed password and algorithm columns. Always call
+    /// `hash_password()` on the customer before invoking this.
+    pub fn update_password(tenant_id: Uuid, id: Uuid, password: &str, algorithm: &str) -> Result<(), ShopsterError> {
+        let mut connection = aquire_database(tenant_id)?;
+
+        diesel::update(customers::table)
+            .filter(customers::id.eq(id))
+            .set((
+                customers::password.eq(password),
+                customers::algorithm.eq(algorithm),
+            ))
+            .execute(&mut connection)?;
+        Ok(())
     }
 
     pub fn delete(tenant_id: Uuid, id: Uuid) -> Result<usize, ShopsterError> {

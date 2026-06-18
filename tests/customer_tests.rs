@@ -3,7 +3,7 @@ mod common;
 use stec_tenet::{Storage, Tenet};
 use stec_tenet::encryption_modes::EncryptionModes;
 use stec_shopster::{DatabaseSelector, Shopster};
-use stec_shopster::customers::Customer;
+use stec_shopster::customers::{Customer, CustomerProfile};
 use uuid::Uuid;
 
 use crate::common::{test_harness, test_harness_two_tenants};
@@ -44,11 +44,12 @@ fn customer_test() {
         //assert_eq!(new_customer.password, inserted_customer.password); // Only Hash is returned
         assert_eq!(new_customer.full_name, inserted_customer.full_name);
 
-        let updated_customer = all_customers.get_mut(0).unwrap();
-        updated_customer.email_verified = false;
-        updated_customer.email = "dummy@stecug.de".to_string();
-
-        customers.update(updated_customer).unwrap();
+        let inserted_customer = all_customers.first().unwrap();
+        customers.update(inserted_customer.id, &CustomerProfile {
+            email: "dummy@stecug.de".to_string(),
+            email_verified: false,
+            full_name: inserted_customer.full_name.clone(),
+        }).unwrap();
 
         let success = customers.remove(all_customers.first().unwrap().id).unwrap();
         assert_eq!(true, success);
@@ -708,13 +709,11 @@ fn update_customer_properties_test() {
 
         let created_customer = customers.insert(&new_customer).unwrap();
 
-        // Aktualisieren verschiedener Eigenschaften
-        let mut updated_customer = created_customer.clone();
-        updated_customer.email = "updated@example.com".to_string();
-        updated_customer.full_name = "Updated Full Name".to_string();
-        updated_customer.email_verified = false;
-
-        let result = customers.update(&updated_customer).unwrap();
+        let result = customers.update(created_customer.id, &CustomerProfile {
+            email: "updated@example.com".to_string(),
+            full_name: "Updated Full Name".to_string(),
+            email_verified: false,
+        }).unwrap();
 
         // Überprüfen der aktualisierten Eigenschaften
         assert_eq!("updated@example.com", result.email);
