@@ -15,6 +15,7 @@ use crate::error::ShopsterError;
 use crate::postgresql::dbproduct::DbProduct;
 use chrono::{NaiveDateTime, Utc};
 use serde_derive::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use uuid::Uuid;
 
 /// Product pricing information.
@@ -86,11 +87,17 @@ impl From<&DbProduct> for Product {
 }
 
 
-impl From<&Product> for DbProduct {
-    fn from(product: &Product) -> Self {
-        let price = product.price.as_ref().unwrap();
+impl TryFrom<&Product> for DbProduct {
+    type Error = ShopsterError;
 
-        DbProduct {
+    fn try_from(product: &Product) -> Result<Self, ShopsterError> {
+        // Price is required - products must have a price
+        let price = product.price.as_ref()
+            .ok_or_else(|| ShopsterError::InvalidOperationError(
+                "Product price is required".to_string()
+            ))?;
+
+        Ok(DbProduct {
             id: product.id,
             title: product.title.clone(),
             gtin: product.gtin.clone(),
@@ -105,7 +112,7 @@ impl From<&Product> for DbProduct {
             weight: product.weight as i32,
             created_at: Utc::now().naive_utc(),
             updated_at: Some(Utc::now().naive_utc())
-        }
+        })
     }
 }
 
@@ -167,7 +174,7 @@ impl Products {
     /// `Ok(Product)` - The created product
     /// `Err(ShopsterError)` - If creation fails
     pub fn insert(&self, product: &Product) -> Result<Product, ShopsterError> {
-        let db_product = DbProduct::from(product);
+        let db_product = DbProduct::try_from(product)?;
         let created_product = DbProduct::create(self.tenant_id, db_product)?;
 
         let reply = Product::from(&created_product);
@@ -185,7 +192,7 @@ impl Products {
     /// `Ok(Product)` - The updated product
     /// `Err(ShopsterError)` - If update fails
     pub fn update(&self, product: &Product) -> Result<Product, ShopsterError> {
-        let db_product = DbProduct::from(product);
+        let db_product = DbProduct::try_from(product)?;
         let updated_product = DbProduct::update(self.tenant_id, product.id, db_product)?;
 
         let reply = Product::from(&updated_product);
