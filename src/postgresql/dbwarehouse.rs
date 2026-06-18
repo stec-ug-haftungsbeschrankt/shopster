@@ -6,11 +6,12 @@ use diesel::{
     Queryable,
 };
 use diesel::prelude::*;
+use diesel_async::{RunQueryDsl, AsyncPgConnection};
 use uuid::Uuid;
 
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_database;
+use crate::aquire_pool;
 
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
 #[diesel(table_name = warehouse)]
@@ -46,56 +47,65 @@ impl From<&DbWarehouse> for InsertableDbWarehouse {
 }
 
 impl DbWarehouse {
-    pub fn find_by_product_id(tenant_id: Uuid, product_id: i64) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
+    pub async fn find_by_product_id(tenant_id: Uuid, product_id: i64) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let item = warehouse::table
             .filter(warehouse::product_id.eq(product_id))
-            .first(&mut connection)?;
+            .first(&mut conn).await?;
         Ok(item)
     }
 
-    pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
+    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
-        let items = warehouse::table.load(&mut connection)?;
+        let items = warehouse::table.load(&mut conn).await?;
         Ok(items)
     }
 
-    pub fn create(tenant_id: Uuid, item: DbWarehouse) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
+    pub async fn create(tenant_id: Uuid, item: DbWarehouse) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let insertable = InsertableDbWarehouse::from(&item);
         let db_item = diesel::insert_into(warehouse::table)
             .values(insertable)
-            .get_result(&mut connection)?;
+            .get_result(&mut conn).await?;
         Ok(db_item)
     }
 
-    pub fn update_by_product_id(tenant_id: Uuid, product_id: i64, item: DbWarehouse) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
+    pub async fn update_by_product_id(tenant_id: Uuid, product_id: i64, item: DbWarehouse) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_item = diesel::update(warehouse::table)
             .filter(warehouse::product_id.eq(product_id))
             .set(item)
-            .get_result(&mut connection)?;
+            .get_result(&mut conn).await?;
         Ok(db_item)
     }
 
-    pub fn delete_by_product_id(tenant_id: Uuid, product_id: i64) -> Result<usize, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
+    pub async fn delete_by_product_id(tenant_id: Uuid, product_id: i64) -> Result<usize, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(
             warehouse::table
                 .filter(warehouse::product_id.eq(product_id)),
         )
-        .execute(&mut connection)?;
+        .execute(&mut conn).await?;
         Ok(res)
     }
 
-    pub fn apply_reserved_delta(tenant_id: Uuid, product_id: i64, delta: i64) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
+    pub async fn apply_reserved_delta(tenant_id: Uuid, product_id: i64, delta: i64) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+        Self::apply_reserved_delta_conn(&mut conn, product_id, delta).await
+    }
 
+    pub async fn apply_reserved_delta_conn(conn: &mut AsyncPgConnection, product_id: i64, delta: i64) -> Result<Self, ShopsterError> {
         // Atomic UPDATE using SQL arithmetic — avoids the read-modify-write race condition
         // where two concurrent callers both read the same value and one update is lost.
         // The WHERE reserved + delta >= 0 guard is evaluated atomically with the SET.
@@ -106,16 +116,15 @@ impl DbWarehouse {
                 warehouse::reserved.eq(warehouse::reserved + delta),
                 warehouse::updated_at.eq(Some(Utc::now().naive_utc())),
             ))
-            .get_result::<DbWarehouse>(&mut connection);
+            .get_result::<DbWarehouse>(conn).await;
 
         match result {
             Ok(updated) => Ok(updated),
             Err(diesel::result::Error::NotFound) => {
-                // Either the row doesn't exist yet, or reserved + delta < 0 — distinguish them.
                 let exists: bool = diesel::select(diesel::dsl::exists(
                     warehouse::table.filter(warehouse::product_id.eq(product_id)),
                 ))
-                .get_result(&mut connection)?;
+                .get_result(conn).await?;
 
                 if exists {
                     return Err(ShopsterError::InvalidOperationError(
@@ -139,7 +148,7 @@ impl DbWarehouse {
                 };
                 Ok(diesel::insert_into(warehouse::table)
                     .values(insertable)
-                    .get_result(&mut connection)?)
+                    .get_result(conn).await?)
             }
             Err(e) => Err(ShopsterError::DatabaseError(e)),
         }
