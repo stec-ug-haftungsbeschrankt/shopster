@@ -106,12 +106,17 @@ impl DbCustomer {
         Ok(db_customer)
     }
 
-    pub fn update(tenant_id: Uuid, id: Uuid, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
+    pub fn update(tenant_id: Uuid, id: Uuid, mut customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
         let mut connection = aquire_database(tenant_id)?;
 
-        // FIXME Hash password if it has changed
-        // How do I notice, if the password has changed?
-        // Currently this is don at the Customer level, but it should be done at the database level.
+        // Hash the password if it is not already an argon2 hash. Callers like
+        // change_password/reset_password pre-hash before calling us; the general
+        // update path may receive plaintext from the caller.
+        if !customer.password.starts_with("$argon2") {
+            let salt: [u8; 32] = rand::random();
+            let config = Config::original();
+            customer.password = argon2::hash_encoded(customer.password.as_bytes(), &salt, &config)?;
+        }
 
         let customer = diesel::update(customers::table)
             .filter(customers::id.eq(id))
