@@ -185,6 +185,11 @@ impl Customers {
     /// `Ok(Customer)` - The created customer
     /// `Err(ShopsterError)` - If creation fails
     pub fn insert(&self, customer: &Customer) -> Result<Customer, ShopsterError> {
+        if !is_valid_email(&customer.email) {
+            return Err(ShopsterError::InvalidOperationError(
+                "Invalid email format".to_string(),
+            ));
+        }
         let db_customer = DbCustomerMessage::from(customer);
         let created_customer = DbCustomer::create(self.tenant_id, db_customer)?;
 
@@ -207,6 +212,11 @@ impl Customers {
     /// `Ok(Customer)` - The updated customer
     /// `Err(ShopsterError)` - If update fails
     pub fn update(&self, customer_id: Uuid, profile: &CustomerProfile) -> Result<Customer, ShopsterError> {
+        if !is_valid_email(&profile.email) {
+            return Err(ShopsterError::InvalidOperationError(
+                "Invalid email format".to_string(),
+            ));
+        }
         let db_profile = DbProfileMessage::from(profile);
         let updated_customer = DbCustomer::update(self.tenant_id, customer_id, db_profile)?;
         Ok(Customer::try_from(&updated_customer)?)
@@ -401,5 +411,15 @@ impl Customers {
         Ok(customers)
     }
 
+}
+
+fn is_valid_email(email: &str) -> bool {
+    let parts: Vec<&str> = email.splitn(2, '@').collect();
+    if parts.len() != 2 {
+        return false;
+    }
+    let local = parts[0];
+    let domain = parts[1];
+    !local.is_empty() && domain.contains('.') && !domain.starts_with('.') && !domain.ends_with('.')
 }
 

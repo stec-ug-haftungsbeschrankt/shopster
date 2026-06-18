@@ -331,6 +331,16 @@ impl Orders {
     }
     
     pub fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
+        if order.delivery_address.trim().is_empty() {
+            return Err(ShopsterError::InvalidOperationError(
+                "Delivery address cannot be empty".to_string(),
+            ));
+        }
+        if order.billing_address.trim().is_empty() {
+            return Err(ShopsterError::InvalidOperationError(
+                "Billing address cannot be empty".to_string(),
+            ));
+        }
         let db_order = DbOrder::from(order);
         let created_order = DbOrder::create(self.tenant_id, db_order)?;
 

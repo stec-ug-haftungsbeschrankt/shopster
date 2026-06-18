@@ -174,6 +174,18 @@ impl Products {
     /// `Ok(Product)` - The created product
     /// `Err(ShopsterError)` - If creation fails
     pub fn insert(&self, product: &Product) -> Result<Product, ShopsterError> {
+        if product.title.trim().is_empty() {
+            return Err(ShopsterError::InvalidOperationError(
+                "Product title cannot be empty".to_string(),
+            ));
+        }
+        if let Some(price) = &product.price {
+            if price.amount < 0 {
+                return Err(ShopsterError::InvalidOperationError(
+                    "Product price cannot be negative".to_string(),
+                ));
+            }
+        }
         let db_product = DbProduct::try_from(product)?;
         let created_product = DbProduct::create(self.tenant_id, db_product)?;
 
@@ -192,6 +204,18 @@ impl Products {
     /// `Ok(Product)` - The updated product
     /// `Err(ShopsterError)` - If update fails
     pub fn update(&self, product: &Product) -> Result<Product, ShopsterError> {
+        if product.title.trim().is_empty() {
+            return Err(ShopsterError::InvalidOperationError(
+                "Product title cannot be empty".to_string(),
+            ));
+        }
+        if let Some(price) = &product.price {
+            if price.amount < 0 {
+                return Err(ShopsterError::InvalidOperationError(
+                    "Product price cannot be negative".to_string(),
+                ));
+            }
+        }
         let db_product = DbProduct::try_from(product)?;
         let updated_product = DbProduct::update(self.tenant_id, product.id, db_product)?;
 

@@ -189,6 +189,11 @@ impl Baskets {
     /// `Ok(i64)` - The ID of the basket-product entry
     /// `Err(ShopsterError)` - If operation fails
     pub fn add_product_to_basket(&self, basket_id: Uuid, product_id: i64, quantity: i64) -> Result<i64, ShopsterError> {
+        if quantity <= 0 {
+            return Err(ShopsterError::InvalidOperationError(
+                "Quantity must be positive".to_string(),
+            ));
+        }
         let items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id)?;
 
         if let Some(mut item) = items.into_iter().find(|x| x.product_id == product_id) {
@@ -203,6 +208,11 @@ impl Baskets {
     }
 
     pub fn update_product_quantity(&self, basket_id: Uuid, basket_product_id: i64, quantity: i64) -> Result<BasketProduct, ShopsterError> {
+        if quantity <= 0 {
+            return Err(ShopsterError::InvalidOperationError(
+                "Quantity must be positive".to_string(),
+            ));
+        }
         // Finde das Basket-Produkt
         let basket_product = DbBasketProduct::find_basket_item(self.tenant_id, basket_product_id)?;
 
@@ -310,21 +320,36 @@ impl Baskets {
             return Ok((0, "EUR".to_string())); // Standardwährung, falls der Warenkorb leer ist
         }
 
-        // Annahme: Alle Produkte haben dieselbe Währung
-        let currency = products_with_details[0].product.price.as_ref()
-            .map(|p| p.currency.clone())
-            .unwrap_or_else(|| "EUR".to_string());
+        let first_currency = products_with_details[0]
+            .product
+            .price
+            .as_ref()
+            .ok_or_else(|| {
+                ShopsterError::InvalidOperationError(
+                    "Cannot calculate total: product has no price".to_string(),
+                )
+            })?
+            .currency
+            .clone();
 
-        // Berechne den Gesamtpreis
-        let total: i64 = products_with_details.iter()
-            .filter_map(|bp| {
-                bp.product.price.as_ref().map(|price| {
-                    price.amount * bp.quantity
-                })
-            })
-            .sum();
+        let mut total: i64 = 0;
+        for bp in &products_with_details {
+            let price = bp.product.price.as_ref().ok_or_else(|| {
+                ShopsterError::InvalidOperationError(format!(
+                    "Cannot calculate total: product {} has no price",
+                    bp.product.id
+                ))
+            })?;
+            if price.currency != first_currency {
+                return Err(ShopsterError::InvalidOperationError(format!(
+                    "Mixed currencies in basket: {} and {}",
+                    first_currency, price.currency
+                )));
+            }
+            total += price.amount * bp.quantity;
+        }
 
-        Ok((total, currency))
+        Ok((total, first_currency))
     }
 
 
