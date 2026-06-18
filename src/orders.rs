@@ -223,6 +223,16 @@ impl Orders {
         matches!(status, OrderStatus::New | OrderStatus::InProgress | OrderStatus::ReadyToShip)
     }
 
+    fn is_valid_transition(from: OrderStatus, to: OrderStatus) -> bool {
+        matches!(
+            (from, to),
+            (OrderStatus::New, OrderStatus::InProgress)
+                | (OrderStatus::InProgress, OrderStatus::ReadyToShip)
+                | (OrderStatus::ReadyToShip, OrderStatus::Shipping)
+                | (OrderStatus::Shipping, OrderStatus::Done)
+        )
+    }
+
     fn apply_reserved_delta(&self, items: &[OrderItemSnapshot], delta: i64) -> Result<(), ShopsterError> {
         let warehouse = Warehouse::new(self.tenant_id);
 
@@ -353,6 +363,13 @@ impl Orders {
         let existing_items = DbOrderItem::get_for_order(self.tenant_id, order.id)?;
         let previous_status: OrderStatus = existing_order.status.into();
         let next_status: OrderStatus = order.status;
+
+        if previous_status != next_status && !Self::is_valid_transition(previous_status, next_status) {
+            return Err(ShopsterError::InvalidOperationError(format!(
+                "Invalid order status transition: {} -> {}",
+                previous_status, next_status
+            )));
+        }
 
         let db_order = DbOrder::from(order);
         let updated_order = DbOrder::update(self.tenant_id, order.id, db_order)?;

@@ -29,53 +29,6 @@ This document presents a comprehensive technical analysis of the Shopster projec
 
 ## High-Priority Issues
 
-### 5. **No Valid Order Status Transitions Validation** 🔴 HIGH - Logic Bug
-**File:** `src/orders.rs` (lines 222-224)  
-**Severity:** HIGH - Allows invalid state transitions  
-
-**Issue:**
-```rust
-// orders.rs
-pub fn update_status(&mut self, order_id: Uuid, new_status: OrderStatus) 
-    -> Result<Order, ShopsterError> 
-{
-    // No validation of current status!
-    // You can go: Done -> New, Done -> InProgress, etc.
-    
-    // Just updates directly:
-    diesel::update(orders::table.find(order_id))
-        .set(orders::status.eq(new_status))
-        .get_result(&mut self.connection)?
-}
-```
-
-**Architecture states:**
-```
-New → InProgress → ReadyToShip → Shipping → Done
-```
-
-**Problem:** The system allows transitioning from any state to any state (e.g., `Done → New`, `Shipping → New`). This violates the documented order lifecycle.
-
-**Impact:** Data integrity issues; orders could be reverted to earlier states; inventory could be double-reserved
-
-**Fix:** Implement state machine validation:
-```rust
-let current_status = order.status;
-let is_valid = match (current_status, new_status) {
-    (OrderStatus::New, OrderStatus::InProgress) => true,
-    (OrderStatus::InProgress, OrderStatus::ReadyToShip) => true,
-    // ... other valid transitions
-    _ => false,
-};
-if !is_valid {
-    return Err(ShopsterError::InvalidOperationError(
-        format!("Cannot transition from {:?} to {:?}", current_status, new_status)
-    ));
-}
-```
-
----
-
 ### 6. **Race Condition in Warehouse Inventory Updates** 🔴 HIGH - Concurrency Bug
 **File:** `src/postgresql/dbwarehouse.rs` (lines 96-107)  
 **Severity:** HIGH - Data consistency issue  
