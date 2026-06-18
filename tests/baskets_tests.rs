@@ -639,3 +639,58 @@ async fn multiple_products_in_basket_test() {
         assert!(product_ids.contains(&product3.id));
     }).await;
 }
+
+#[tokio::test]
+async fn empty_basket_total_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("empty_basket_total_test".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+
+        let baskets = shopster.baskets(tenant.id).unwrap();
+        let basket_id = baskets.add_basket().await.unwrap();
+
+        let (total, currency) = baskets.calculate_basket_total(basket_id).await.unwrap();
+
+        assert_eq!(0, total, "Empty basket total should be 0");
+        assert_eq!("EUR", currency, "Empty basket total should default to EUR");
+    }).await;
+}
+
+#[tokio::test]
+async fn insert_product_without_price_is_rejected_test() {
+    // Products require a price at the DB layer (DbProduct::try_from enforces this),
+    // so a priceless product can never enter a basket. This test documents that guarantee.
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("basket_total_no_price_test".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+
+        let products = shopster.products(tenant.id).unwrap();
+        let result = products.insert(&Product {
+            id: 0,
+            article_number: "ART-NOPRICE".to_string(),
+            title: "Product Without Price".to_string(),
+            gtin: "0000000000001".to_string(),
+            short_description: "No price product".to_string(),
+            description: "This product has no price".to_string(),
+            image_url: "/images/noprice.png".to_string(),
+            additional_images: Vec::new(),
+            price: None,
+            weight: 100,
+            tags: Vec::new(),
+            created_at: Utc::now().naive_utc(),
+            updated_at: None,
+        }).await;
+
+        assert!(result.is_err(), "Inserting a product without a price should be rejected");
+    }).await;
+}
