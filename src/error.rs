@@ -47,5 +47,13 @@ pub enum ShopsterError {
 
     /// Authentication failed (invalid credentials, expired session, etc.).
     #[error("Authentication Error")]
-    AuthenticationError(String)
+    AuthenticationError(String),
+
+    /// Database migration failed.
+    #[error("Database Migration Error: {0}")]
+    DatabaseMigrationError(String),
+
+    /// An internal error occurred (e.g., mutex poisoned).
+    #[error("Internal Error: {0}")]
+    InternalError(String),
 }

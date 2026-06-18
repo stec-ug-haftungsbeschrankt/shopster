@@ -178,7 +178,8 @@ impl DatabaseSelector {
         let pool = Pool::new(manager)?;
 
         let mut database_connection = pool.get()?;
-        database_connection.run_pending_migrations(MIGRATIONS).unwrap();
+        database_connection.run_pending_migrations(MIGRATIONS)
+            .map_err(|e| ShopsterError::DatabaseMigrationError(e.to_string()))?;
 
         let tenant_id = Uuid::new_v4();
         self.database_cache.insert(tenant_id, pool);
@@ -263,7 +264,8 @@ static DATABASE_SELECTOR: OnceLock<Mutex<DatabaseSelector>> = OnceLock::new();
 /// `Ok(DbConnection)` - A pooled connection ready for use
 /// `Err(ShopsterError)` - If tenant not found or connection acquisition fails
 fn aquire_database(tenant_id: Uuid) -> Result<DbConnection, ShopsterError> {
-    let mut database_selector = DATABASE_SELECTOR.get().expect(DATABASE_ACQUISITION_ERROR).lock().unwrap();
+    let mut database_selector = DATABASE_SELECTOR.get().expect(DATABASE_ACQUISITION_ERROR)
+        .lock().map_err(|_| ShopsterError::InternalError("Database selector mutex poisoned".to_string()))?;
     let pool = database_selector.get_storage_for_tenant(tenant_id)?;
     let connection = pool.get()?;
     Ok(connection)
