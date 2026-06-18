@@ -29,46 +29,6 @@ This document presents a comprehensive technical analysis of the Shopster projec
 
 ## High-Priority Issues
 
-### 6. **Race Condition in Warehouse Inventory Updates** 🔴 HIGH - Concurrency Bug
-**File:** `src/postgresql/dbwarehouse.rs` (lines 96-107)  
-**Severity:** HIGH - Data consistency issue  
-
-**Issue:**
-```rust
-// dbwarehouse.rs - apply_reserved_delta
-pub fn apply_reserved_delta(&mut self, product_id: i64, delta: i32) 
-    -> Result<WarehouseItem, ShopsterError> 
-{
-    // 1. SELECT current value
-    let item = self.get_by_product_id(product_id)?;
-    
-    // 2. UPDATE with calculated value
-    diesel::update(warehouse::table.find(item.id))
-        .set(warehouse::reserved.eq(item.reserved + delta))  // NOT ATOMIC!
-        .get_result(&mut self.connection)?
-}
-```
-
-**Problem:** The operation is not atomic. Between reading and updating:
-1. Thread A: reads reserved=10
-2. Thread B: reads reserved=10
-3. Thread A: updates to reserved=15 (10+5)
-4. Thread B: updates to reserved=12 (10+2)
-5. Final result: reserved=12 (Thread B's write wins, Thread A's is lost)
-
-**Impact:** Inventory tracking becomes incorrect; overselling or underselling can occur
-
-**Fix:** Use SQL UPDATE with arithmetic:
-```rust
-diesel::update(warehouse::table.find(product_id))
-    .set(warehouse::reserved.eq(warehouse::reserved + delta))
-    .get_result(&mut self.connection)?
-```
-
-Or wrap in a database transaction if multiple operations.
-
----
-
 ### 7. **Multiple Storage Tenants Always Use First Storage** 🔴 HIGH - Silently Wrong
 **File:** `src/lib.rs` (line 212)  
 **Severity:** HIGH - Data consistency issue  

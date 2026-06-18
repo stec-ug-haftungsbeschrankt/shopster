@@ -94,36 +94,54 @@ impl DbWarehouse {
     }
 
     pub fn apply_reserved_delta(tenant_id: Uuid, product_id: i64, delta: i64) -> Result<Self, ShopsterError> {
-        match Self::find_by_product_id(tenant_id, product_id) {
-            Ok(mut existing) => {
-                let new_reserved = existing.reserved + delta;
-                if new_reserved < 0 {
+        let mut connection = aquire_database(tenant_id)?;
+
+        // Atomic UPDATE using SQL arithmetic — avoids the read-modify-write race condition
+        // where two concurrent callers both read the same value and one update is lost.
+        // The WHERE reserved + delta >= 0 guard is evaluated atomically with the SET.
+        let result = diesel::update(warehouse::table)
+            .filter(warehouse::product_id.eq(product_id))
+            .filter((warehouse::reserved + delta).ge(0i64))
+            .set((
+                warehouse::reserved.eq(warehouse::reserved + delta),
+                warehouse::updated_at.eq(Some(Utc::now().naive_utc())),
+            ))
+            .get_result::<DbWarehouse>(&mut connection);
+
+        match result {
+            Ok(updated) => Ok(updated),
+            Err(diesel::result::Error::NotFound) => {
+                // Either the row doesn't exist yet, or reserved + delta < 0 — distinguish them.
+                let exists: bool = diesel::select(diesel::dsl::exists(
+                    warehouse::table.filter(warehouse::product_id.eq(product_id)),
+                ))
+                .get_result(&mut connection)?;
+
+                if exists {
                     return Err(ShopsterError::InvalidOperationError(
                         "Reserved stock cannot be negative".to_string(),
                     ));
                 }
-                existing.reserved = new_reserved;
-                existing.updated_at = Some(Utc::now().naive_utc());
-                Self::update_by_product_id(tenant_id, product_id, existing)
-            }
-            Err(ShopsterError::DatabaseError(diesel::result::Error::NotFound)) => {
+
                 if delta < 0 {
                     return Err(ShopsterError::InvalidOperationError(
                         "Reserved stock cannot be negative".to_string(),
                     ));
                 }
+
                 let now = Utc::now().naive_utc();
-                let new_item = DbWarehouse {
-                    id: 0,
+                let insertable = InsertableDbWarehouse {
                     product_id,
                     in_stock: 0,
                     reserved: delta,
                     created_at: now,
                     updated_at: Some(now),
                 };
-                Self::create(tenant_id, new_item)
+                Ok(diesel::insert_into(warehouse::table)
+                    .values(insertable)
+                    .get_result(&mut connection)?)
             }
-            Err(e) => Err(e),
+            Err(e) => Err(ShopsterError::DatabaseError(e)),
         }
     }
 }

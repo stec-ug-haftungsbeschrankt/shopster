@@ -78,7 +78,7 @@ fn order_test() {
             updated_at: None,
         };
 
-        let order = orders.insert(&new_order).unwrap();
+        let _ = orders.insert(&new_order).unwrap();
 
         let mut all_orders = orders.get_all().unwrap();
         assert_eq!(1, all_orders.len());
@@ -89,9 +89,14 @@ fn order_test() {
         assert_eq!(new_order.delivery_address, inserted_order.delivery_address);
 
         let updated_order = all_orders.get_mut(0).unwrap();
-        updated_order.status = OrderStatus::ReadyToShip;
+        updated_order.status = OrderStatus::InProgress;
         updated_order.delivery_address = "Bugs Bunny, Bunny road 44, 55555 Bunnycity".to_string();
 
+        orders.update(updated_order).unwrap();
+
+        let mut all_orders = orders.get_all().unwrap();
+        let updated_order = all_orders.get_mut(0).unwrap();
+        updated_order.status = OrderStatus::ReadyToShip;
         orders.update(updated_order).unwrap();
 
         let success = orders.remove(all_orders.first().unwrap().id).unwrap();
