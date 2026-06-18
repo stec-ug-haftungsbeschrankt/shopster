@@ -12,6 +12,7 @@
 //! ```
 
 use std::str::FromStr;
+use std::convert::TryFrom;
 
 use stec_tenet::encryption_modes::EncryptionModes;
 use uuid::Uuid;
@@ -52,18 +53,23 @@ pub struct CustomerProfile {
     pub full_name: String,
 }
 
-impl From<&DbCustomer> for Customer {
-    fn from(db_customer: &DbCustomer) -> Self {
-        Customer {
+impl TryFrom<&DbCustomer> for Customer {
+    type Error = ShopsterError;
+
+    fn try_from(db_customer: &DbCustomer) -> Result<Self, Self::Error> {
+        Ok(Customer {
             id: db_customer.id,
             email: db_customer.email.clone(),
             email_verified: db_customer.email_verified,
-            encryption_mode: EncryptionModes::from_str(&db_customer.algorithm).unwrap(),
+            encryption_mode: EncryptionModes::from_str(&db_customer.algorithm)
+                .map_err(|_| ShopsterError::InvalidOperationError(
+                    format!("Invalid encryption mode: {}", db_customer.algorithm)
+                ))?,
             password: db_customer.password.clone(),
             full_name: db_customer.full_name.clone(),
             created_at: db_customer.created_at,
-            updated_at: db_customer.updated_at
-        }
+            updated_at: db_customer.updated_at,
+        })
     }
 }
 
@@ -132,7 +138,7 @@ impl Customers {
     /// `Err(ShopsterError)` - If database error occurs
     pub fn get_all(&self) -> Result<Vec<Customer>, ShopsterError> {
         let db_customers = DbCustomer::get_all(self.tenant_id)?;
-        let customers = db_customers.iter().map(Customer::from).collect();
+        let customers = db_customers.iter().map(Customer::try_from).collect::<Result<Vec<_>, _>>()?;
         Ok(customers)
     }
     
@@ -148,7 +154,7 @@ impl Customers {
     /// `Err(ShopsterError)` - If not found or database error
     pub fn get(&self, customer_id: Uuid) -> Result<Customer, ShopsterError> {
         let db_customer = DbCustomer::find(self.tenant_id, customer_id)?;
-        let customer = Customer::from(&db_customer);
+        let customer = Customer::try_from(&db_customer)?;
         Ok(customer)
     }
 
@@ -164,7 +170,7 @@ impl Customers {
     /// `Err(ShopsterError)` - If not found or database error
     pub fn find_by_email(&self, email: String) -> Result<Customer, ShopsterError> {
         let db_customer = DbCustomer::find_by_email(self.tenant_id, email)?;
-        let customer = Customer::from(&db_customer);
+        let customer = Customer::try_from(&db_customer)?;
         Ok(customer)
     }
 
@@ -182,7 +188,7 @@ impl Customers {
         let db_customer = DbCustomerMessage::from(customer);
         let created_customer = DbCustomer::create(self.tenant_id, db_customer)?;
 
-        let reply = Customer::from(&created_customer);
+        let reply = Customer::try_from(&created_customer)?;
         Ok(reply)
     }
     
@@ -203,9 +209,9 @@ impl Customers {
     pub fn update(&self, customer_id: Uuid, profile: &CustomerProfile) -> Result<Customer, ShopsterError> {
         let db_profile = DbProfileMessage::from(profile);
         let updated_customer = DbCustomer::update(self.tenant_id, customer_id, db_profile)?;
-        Ok(Customer::from(&updated_customer))
+        Ok(Customer::try_from(&updated_customer)?)
     }
-    
+
     /// Deletes a customer.
     ///
     /// # Arguments
@@ -259,7 +265,7 @@ impl Customers {
         }
 
         // Wenn das Passwort korrekt ist, gib den Kunden zurück
-        let customer = Customer::from(&db_customer);
+        let customer = Customer::try_from(&db_customer)?;
         Ok(customer)
     }
 
@@ -358,7 +364,7 @@ impl Customers {
         let updated_db_customer = DbCustomer::update(self.tenant_id, customer_id, profile)?;
 
         // Konvertiere den aktualisierten Kunden und gib ihn zurück
-        let customer = Customer::from(&updated_db_customer);
+        let customer = Customer::try_from(&updated_db_customer)?;
         Ok(customer)
     }
 
@@ -385,13 +391,13 @@ impl Customers {
     /// `Err(ShopsterError)` - If search fails
     pub fn search_customers(&self, search_term: &str) -> Result<Vec<Customer>, ShopsterError> {
         let db_customers = DbCustomer::search(self.tenant_id, search_term)?;
-        let customers = db_customers.iter().map(Customer::from).collect();
+        let customers = db_customers.iter().map(Customer::try_from).collect::<Result<Vec<_>, _>>()?;
         Ok(customers)
     }
 
     pub fn get_customers_with_pagination(&self, page: i64, per_page: i64) -> Result<Vec<Customer>, ShopsterError> {
         let db_customers = DbCustomer::get_with_pagination(self.tenant_id, page, per_page)?;
-        let customers = db_customers.iter().map(Customer::from).collect();
+        let customers = db_customers.iter().map(Customer::try_from).collect::<Result<Vec<_>, _>>()?;
         Ok(customers)
     }
 

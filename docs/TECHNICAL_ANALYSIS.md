@@ -66,39 +66,6 @@ pub fn aquire_database(&self, tenant_id: Uuid) -> Result<Pool, ShopsterError> {
 
 ---
 
-### 8. **Encryption Mode Parsing Without Error Handling** 🔴 HIGH - Panic Risk
-**File:** `src/customers.rs` (line 54)  
-**Severity:** HIGH - Can panic on invalid database data  
-
-**Issue:**
-```rust
-// customers.rs - From<DbCustomer> impl
-impl From<DbCustomer> for Customer {
-    fn from(customer: DbCustomer) -> Self {
-        Customer {
-            // ...
-            encryption_mode: EncryptionModes::from_str(&customer.encryption_mode)
-                .unwrap(),  // PANIC if invalid!
-            // ...
-        }
-    }
-}
-```
-
-**Problem:** If database contains an invalid `encryption_mode` string, this will panic.
-
-**Impact:** Application crash when fetching customers with corrupted encryption_mode
-
-**Fix:** Return `Result` instead of panicking:
-```rust
-encryption_mode: EncryptionModes::from_str(&customer.encryption_mode)
-    .map_err(|_| ShopsterError::InvalidOperationError(
-        format!("Invalid encryption mode: {}", customer.encryption_mode)
-    ))?,
-```
-
----
-
 ## Medium-Priority Issues
 
 ### 9. **Missing Input Validations** 🟡 MEDIUM
