@@ -69,6 +69,7 @@ diesel::table! {
         billing_address -> Text,
         created_at -> Timestamp,
         updated_at -> Nullable<Timestamp>,
+        payment_reference -> Nullable<Text>,
     }
 }
 

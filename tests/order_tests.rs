@@ -22,6 +22,7 @@ fn make_order(status: OrderStatus) -> Order {
         items: Vec::new(),
         created_at: Utc::now().naive_utc(),
         updated_at: None,
+        payment_reference: None,
     }
 }
 
@@ -169,6 +170,7 @@ async fn order_inventory_reservation_on_insert_test() {
             }],
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            payment_reference: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -227,6 +229,7 @@ async fn order_reservation_released_on_shipping_test() {
             }],
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            payment_reference: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -282,6 +285,7 @@ async fn order_create_from_basket_test() {
             basket_id,
             "Delivery Street 5, 99999 Deliverytown".to_string(),
             "Billing Street 5, 99999 Billingtown".to_string(),
+            None,
         ).await.unwrap();
 
         assert_eq!(OrderStatus::New, order.status);
@@ -411,6 +415,7 @@ async fn order_remove_releases_reservation_test() {
             }],
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            payment_reference: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
