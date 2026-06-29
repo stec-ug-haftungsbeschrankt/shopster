@@ -148,6 +148,7 @@ pub struct Order {
     pub items: Vec<OrderItemSnapshot>,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    pub payment_reference: Option<String>,
 }
 
 impl From<&Order> for DbOrder {
@@ -159,7 +160,8 @@ impl From<&Order> for DbOrder {
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
             created_at: Utc::now().naive_utc(),
-            updated_at: Some(Utc::now().naive_utc())
+            updated_at: Some(Utc::now().naive_utc()),
+            payment_reference: order.payment_reference.clone(),
         }
     }
 }
@@ -205,6 +207,7 @@ impl Orders {
                 items,
                 created_at: db_order.created_at,
                 updated_at: db_order.updated_at,
+                payment_reference: db_order.payment_reference,
             });
         }
 
@@ -225,6 +228,7 @@ impl Orders {
             items,
             created_at: db_order.created_at,
             updated_at: db_order.updated_at,
+            payment_reference: db_order.payment_reference,
         })
     }
 
@@ -245,6 +249,7 @@ impl Orders {
                 items,
                 created_at: db_order.created_at,
                 updated_at: db_order.updated_at,
+                payment_reference: db_order.payment_reference,
             });
         }
 
@@ -268,10 +273,31 @@ impl Orders {
                 items,
                 created_at: db_order.created_at,
                 updated_at: db_order.updated_at,
+                payment_reference: db_order.payment_reference,
             });
         }
 
         Ok(orders)
+    }
+
+    pub async fn get_by_payment_reference(&self, payment_reference: &str) -> Result<Option<Order>, ShopsterError> {
+        let Some(db_order) = DbOrder::find_by_payment_reference(self.tenant_id, payment_reference).await? else {
+            return Ok(None);
+        };
+        let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+        let items = db_items.iter().map(OrderItemSnapshot::from).collect();
+
+        Ok(Some(Order {
+            id: db_order.id,
+            customer_id: db_order.customer_id,
+            status: db_order.status.into(),
+            delivery_address: db_order.delivery_address,
+            billing_address: db_order.billing_address,
+            items,
+            created_at: db_order.created_at,
+            updated_at: db_order.updated_at,
+            payment_reference: db_order.payment_reference,
+        }))
     }
 
     pub async fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
@@ -317,6 +343,7 @@ impl Orders {
                 items,
                 created_at: created_order.created_at,
                 updated_at: created_order.updated_at,
+                payment_reference: created_order.payment_reference,
             })
         }).await
     }
@@ -365,6 +392,7 @@ impl Orders {
                 items,
                 created_at: updated_order.created_at,
                 updated_at: updated_order.updated_at,
+                payment_reference: updated_order.payment_reference,
             })
         }).await
     }
@@ -386,7 +414,7 @@ impl Orders {
         Ok(result > 0)
     }
 
-    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String) -> Result<Order, ShopsterError> {
+    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String, payment_reference: Option<String>) -> Result<Order, ShopsterError> {
         let baskets = Baskets::new(self.tenant_id);
         let basket_items = baskets.get_products_with_details(basket_id).await?;
 
@@ -426,6 +454,7 @@ impl Orders {
             items,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            payment_reference,
         };
 
         self.insert(&order).await

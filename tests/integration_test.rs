@@ -53,7 +53,7 @@ async fn settings_get_all() {
         let settings = shopster.settings(tenant.id).unwrap().get_all().await;
 
         assert!(settings.is_ok());
-        assert_eq!(13, settings.unwrap().len());
+        assert_eq!(14, settings.unwrap().len());
     }).await;
 }
 
@@ -79,6 +79,7 @@ async fn order_test() {
             items: Vec::new(),
             created_at: Default::default(),
             updated_at: None,
+            payment_reference: None,
         };
 
         let _ = orders.insert(&new_order).await.unwrap();

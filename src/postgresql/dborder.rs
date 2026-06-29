@@ -99,7 +99,8 @@ pub struct DbOrder {
     pub delivery_address: String,
     pub billing_address: String,
     pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>
+    pub updated_at: Option<NaiveDateTime>,
+    pub payment_reference: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Insertable)]
@@ -110,7 +111,8 @@ pub struct InsertableDbOrder {
     pub delivery_address: String,
     pub billing_address: String,
     pub created_at: NaiveDateTime,
-    pub updated_at: Option<NaiveDateTime>
+    pub updated_at: Option<NaiveDateTime>,
+    pub payment_reference: Option<String>,
 }
 
 impl From<&DbOrder> for InsertableDbOrder {
@@ -121,7 +123,8 @@ impl From<&DbOrder> for InsertableDbOrder {
             delivery_address: order.delivery_address.clone(),
             billing_address: order.billing_address.clone(),
             created_at: order.created_at,
-            updated_at: order.updated_at
+            updated_at: order.updated_at,
+            payment_reference: order.payment_reference.clone(),
         }
     }
 }
@@ -260,6 +263,17 @@ impl DbOrder {
             .filter(orders::customer_id.eq(customer_id))
             .load(&mut conn).await?;
         Ok(orders)
+    }
+
+    pub async fn find_by_payment_reference(tenant_id: Uuid, payment_reference: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let order = orders::table
+            .filter(orders::payment_reference.eq(payment_reference))
+            .first(&mut conn).await
+            .optional()?;
+        Ok(order)
     }
 
     pub async fn get_without_customer_id(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
