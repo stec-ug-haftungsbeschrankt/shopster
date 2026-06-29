@@ -22,8 +22,8 @@ pub enum ShopsterError {
     SerializationError(#[from] serde_json::Error),
 
     /// Error acquiring a database connection from the pool.
-    #[error("Database Connection Error")]
-    DatabaseConnectionError(#[from] r2d2::Error),
+    #[error("Database Connection Error: {0}")]
+    DatabaseConnectionError(String),
 
     /// Error from Diesel ORM operations.
     #[error("Database Error")]

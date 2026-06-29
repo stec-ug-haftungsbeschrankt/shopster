@@ -1,41 +1,26 @@
 //! Order management and processing.
-//!
-//! This module handles order CRUD operations, status tracking, and order item management.
-//! Orders represent completed purchases with delivery and billing information.
-//!
-//! # Example
-//!
-//! ```ignore
-//! let orders = shopster.orders(tenant_id)?;
-//! let order = orders.insert(&Order { ... })?;
-//! let all = orders.get_all()?;
-//! ```
 
 use std::fmt;
 use uuid::Uuid;
 use chrono::{NaiveDateTime, Utc};
 
+use diesel_async::AsyncConnection;
+
+use crate::aquire_pool;
 use crate::error::ShopsterError;
 use crate::baskets::Baskets;
 use crate::postgresql::dborder::DbOrder;
 use crate::postgresql::dborder::DbOrderItem;
 use crate::postgresql::dborder::DbOrderStatus;
-use crate::warehouse::Warehouse;
+use crate::postgresql::dbwarehouse::DbWarehouse;
 
 /// The lifecycle status of an order.
-///
-/// Tracks the progression of an order from creation through delivery.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OrderStatus {
-    /// Order has been created but not yet processed
     New,
-    /// Order is being processed/picked
     InProgress,
-    /// Order is ready to ship
     ReadyToShip,
-    /// Order is in transit
     Shipping,
-    /// Order has been delivered
     Done,
 }
 
@@ -70,25 +55,16 @@ impl From<OrderStatus> for DbOrderStatus {
 }
 
 /// Price information captured in an order item.
-///
-/// Frozen at the time of order to preserve historical pricing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderItemPrice {
-    /// Price amount in cents
     pub amount: i64,
-    /// Currency code at time of order
     pub currency: String,
 }
 
 /// A snapshot of a product as it was at order time.
-///
-/// Captured to preserve product information at order time,
-/// even if the product is later modified or deleted.
 #[derive(Debug, Clone, PartialEq)]
 pub struct OrderItemSnapshot {
-    /// Item ID
     pub id: i64,
-    /// Product ID (may no longer exist)
     pub product_id: i64,
     pub quantity: i64,
     pub article_number: String,
@@ -163,25 +139,14 @@ impl From<&OrderItemSnapshot> for DbOrderItem {
 }
 
 /// A complete order.
-///
-/// Represents a customer purchase with delivery address, billing address,
-/// and a list of items ordered.
 pub struct Order {
-    /// Unique order identifier
     pub id: i64,
-    /// Customer ID if account holder, None for guest checkout
     pub customer_id: Option<Uuid>,
-    /// Current order status
     pub status: OrderStatus,
-    /// Delivery address
     pub delivery_address: String,
-    /// Billing address
     pub billing_address: String,
-    /// Items in the order
     pub items: Vec<OrderItemSnapshot>,
-    /// When order was created
     pub created_at: NaiveDateTime,
-    /// Last update time
     pub updated_at: Option<NaiveDateTime>,
 }
 
@@ -199,22 +164,12 @@ impl From<&Order> for DbOrder {
     }
 }
 
-
 /// Handler for order management operations.
-///
-/// Provides CRUD operations and status tracking for orders within a tenant.
-/// Automatically handles inventory reservation when orders transition to certain statuses.
 pub struct Orders {
-    /// The tenant ID for tenant isolation
     tenant_id: Uuid
 }
 
 impl Orders {
-    /// Creates a new Orders handler for a tenant.
-    ///
-    /// # Arguments
-    ///
-    /// * `tenant_id` - The tenant's UUID
     pub fn new(tenant_id: Uuid) -> Self {
         Orders { tenant_id }
     }
@@ -233,23 +188,12 @@ impl Orders {
         )
     }
 
-    fn apply_reserved_delta(&self, items: &[OrderItemSnapshot], delta: i64) -> Result<(), ShopsterError> {
-        let warehouse = Warehouse::new(self.tenant_id);
-
-        for item in items {
-            let item_delta = item.quantity * delta;
-            warehouse.apply_reserved_delta(item.product_id, item_delta)?;
-        }
-
-        Ok(())
-    }
-    
-    pub fn get_all(&self) -> Result<Vec<Order>, ShopsterError> {
-        let db_orders = DbOrder::get_all(self.tenant_id)?;
+    pub async fn get_all(&self) -> Result<Vec<Order>, ShopsterError> {
+        let db_orders = DbOrder::get_all(self.tenant_id).await?;
         let mut orders = Vec::new();
 
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id)?;
+            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
             orders.push(Order {
@@ -266,10 +210,10 @@ impl Orders {
 
         Ok(orders)
     }
-    
-    pub fn get_by_id(&self, order_id: i64) -> Result<Order, ShopsterError> {
-        let db_order = DbOrder::find(self.tenant_id, order_id)?;
-        let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id)?;
+
+    pub async fn get_by_id(&self, order_id: i64) -> Result<Order, ShopsterError> {
+        let db_order = DbOrder::find(self.tenant_id, order_id).await?;
+        let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
         let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
         Ok(Order {
@@ -284,12 +228,12 @@ impl Orders {
         })
     }
 
-    pub fn get_by_customer_id(&self, customer_id: Uuid) -> Result<Vec<Order>, ShopsterError> {
-        let db_orders = DbOrder::get_by_customer_id(self.tenant_id, customer_id)?;
+    pub async fn get_by_customer_id(&self, customer_id: Uuid) -> Result<Vec<Order>, ShopsterError> {
+        let db_orders = DbOrder::get_by_customer_id(self.tenant_id, customer_id).await?;
         let mut orders = Vec::new();
 
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id)?;
+            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
             orders.push(Order {
@@ -307,12 +251,12 @@ impl Orders {
         Ok(orders)
     }
 
-    pub fn get_without_customer_id(&self) -> Result<Vec<Order>, ShopsterError> {
-        let db_orders = DbOrder::get_without_customer_id(self.tenant_id)?;
+    pub async fn get_without_customer_id(&self) -> Result<Vec<Order>, ShopsterError> {
+        let db_orders = DbOrder::get_without_customer_id(self.tenant_id).await?;
         let mut orders = Vec::new();
 
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id)?;
+            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
             orders.push(Order {
@@ -329,8 +273,8 @@ impl Orders {
 
         Ok(orders)
     }
-    
-    pub fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
+
+    pub async fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
         if order.delivery_address.trim().is_empty() {
             return Err(ShopsterError::InvalidOperationError(
                 "Delivery address cannot be empty".to_string(),
@@ -341,36 +285,45 @@ impl Orders {
                 "Billing address cannot be empty".to_string(),
             ));
         }
+
+        let pool = aquire_pool(self.tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
         let db_order = DbOrder::from(order);
-        let created_order = DbOrder::create(self.tenant_id, db_order)?;
+        let mut db_items_input: Vec<DbOrderItem> = order.items.iter().map(DbOrderItem::from).collect();
+        let is_reserving = Self::is_reserving_status(order.status);
 
-        let mut db_items: Vec<DbOrderItem> = order.items.iter().map(DbOrderItem::from).collect();
-        for db_item in &mut db_items {
-            db_item.order_id = created_order.id;
-        }
-        let created_items = DbOrderItem::create_for_order(self.tenant_id, db_items)?;
-        let items: Vec<OrderItemSnapshot> = created_items.iter().map(OrderItemSnapshot::from).collect();
+        conn.transaction(async |conn| {
+            let created_order = DbOrder::create_conn(conn, db_order).await?;
 
-        let created_status: OrderStatus = created_order.status.into();
-        if Self::is_reserving_status(created_status) {
-            self.apply_reserved_delta(&items, 1)?;
-        }
+            for db_item in &mut db_items_input {
+                db_item.order_id = created_order.id;
+            }
+            let created_items = DbOrderItem::create_for_order_conn(conn, db_items_input).await?;
+            let items: Vec<OrderItemSnapshot> = created_items.iter().map(OrderItemSnapshot::from).collect();
 
-        Ok(Order {
-            id: created_order.id,
-            customer_id: created_order.customer_id,
-            status: created_order.status.into(),
-            delivery_address: created_order.delivery_address,
-            billing_address: created_order.billing_address,
-            items,
-            created_at: created_order.created_at,
-            updated_at: created_order.updated_at,
-        })
+            if is_reserving {
+                for item in &items {
+                    DbWarehouse::apply_reserved_delta_conn(conn, item.product_id, item.quantity).await?;
+                }
+            }
+
+            Ok(Order {
+                id: created_order.id,
+                customer_id: created_order.customer_id,
+                status: created_order.status.into(),
+                delivery_address: created_order.delivery_address,
+                billing_address: created_order.billing_address,
+                items,
+                created_at: created_order.created_at,
+                updated_at: created_order.updated_at,
+            })
+        }).await
     }
-    
-    pub fn update(&self, order: &Order) -> Result<Order, ShopsterError> {
-        let existing_order = DbOrder::find(self.tenant_id, order.id)?;
-        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order.id)?;
+
+    pub async fn update(&self, order: &Order) -> Result<Order, ShopsterError> {
+        let existing_order = DbOrder::find(self.tenant_id, order.id).await?;
+        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order.id).await?;
         let previous_status: OrderStatus = existing_order.status.into();
         let next_status: OrderStatus = order.status;
 
@@ -381,48 +334,61 @@ impl Orders {
             )));
         }
 
+        let pool = aquire_pool(self.tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
         let db_order = DbOrder::from(order);
-        let updated_order = DbOrder::update(self.tenant_id, order.id, db_order)?;
-
-        let db_items = DbOrderItem::get_for_order(self.tenant_id, updated_order.id)?;
-        let items = db_items.iter().map(OrderItemSnapshot::from).collect();
-
+        let order_id = order.id;
         let previous_reserving = Self::is_reserving_status(previous_status);
         let next_reserving = Self::is_reserving_status(next_status);
-        if previous_reserving != next_reserving {
-            let delta = if next_reserving { 1 } else { -1 };
-            let previous_snapshots: Vec<OrderItemSnapshot> = existing_items.iter().map(OrderItemSnapshot::from).collect();
-            self.apply_reserved_delta(&previous_snapshots, delta)?;
-        }
+        let previous_snapshots: Vec<OrderItemSnapshot> = existing_items.iter().map(OrderItemSnapshot::from).collect();
 
-        Ok(Order {
-            id: updated_order.id,
-            customer_id: updated_order.customer_id,
-            status: updated_order.status.into(),
-            delivery_address: updated_order.delivery_address,
-            billing_address: updated_order.billing_address,
-            items,
-            created_at: updated_order.created_at,
-            updated_at: updated_order.updated_at,
-        })
+        conn.transaction(async |conn| {
+            let updated_order = DbOrder::update_conn(conn, order_id, db_order).await?;
+
+            let db_items = DbOrderItem::get_for_order_conn(conn, updated_order.id).await?;
+            let items: Vec<OrderItemSnapshot> = db_items.iter().map(OrderItemSnapshot::from).collect();
+
+            if previous_reserving != next_reserving {
+                let delta = if next_reserving { 1i64 } else { -1i64 };
+                for item in &previous_snapshots {
+                    DbWarehouse::apply_reserved_delta_conn(conn, item.product_id, item.quantity * delta).await?;
+                }
+            }
+
+            Ok(Order {
+                id: updated_order.id,
+                customer_id: updated_order.customer_id,
+                status: updated_order.status.into(),
+                delivery_address: updated_order.delivery_address,
+                billing_address: updated_order.billing_address,
+                items,
+                created_at: updated_order.created_at,
+                updated_at: updated_order.updated_at,
+            })
+        }).await
     }
-    
-    pub fn remove(&self, order_id: i64) -> Result<bool, ShopsterError> {
-        let existing_order = DbOrder::find(self.tenant_id, order_id)?;
-        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order_id)?;
+
+    pub async fn remove(&self, order_id: i64) -> Result<bool, ShopsterError> {
+        let existing_order = DbOrder::find(self.tenant_id, order_id).await?;
+        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order_id).await?;
         let existing_status: OrderStatus = existing_order.status.into();
+
         if Self::is_reserving_status(existing_status) {
-            let existing_snapshots: Vec<OrderItemSnapshot> = existing_items.iter().map(OrderItemSnapshot::from).collect();
-            self.apply_reserved_delta(&existing_snapshots, -1)?;
+            let pool = aquire_pool(self.tenant_id).await?;
+            let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+            for item in &existing_items {
+                DbWarehouse::apply_reserved_delta_conn(&mut conn, item.product_id, -(item.quantity)).await?;
+            }
         }
 
-        let result = DbOrder::delete(self.tenant_id, order_id)?;
+        let result = DbOrder::delete(self.tenant_id, order_id).await?;
         Ok(result > 0)
     }
 
-    pub fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String) -> Result<Order, ShopsterError> {
+    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String) -> Result<Order, ShopsterError> {
         let baskets = Baskets::new(self.tenant_id);
-        let basket_items = baskets.get_products_with_details(basket_id)?;
+        let basket_items = baskets.get_products_with_details(basket_id).await?;
 
         let mut items = Vec::new();
         for basket_item in basket_items {
@@ -462,6 +428,6 @@ impl Orders {
             updated_at: None,
         };
 
-        self.insert(&order)
+        self.insert(&order).await
     }
 }

@@ -1,6 +1,6 @@
 use crate::ShopsterError;
 use crate::schema::settings;
-use crate::aquire_database;
+use crate::aquire_pool;
 
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
@@ -10,6 +10,7 @@ use diesel::{
     Queryable,
     Insertable, Identifiable, AsChangeset
 };
+use diesel_async::RunQueryDsl;
 
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
 #[diesel(table_name = settings)]
@@ -23,63 +24,70 @@ pub struct DbSetting {
 
 impl DbSetting {
 
-    pub fn find(tenant_id: Uuid, id: i32) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
-        let settings = settings::table.filter(settings::id.eq(id)).first(&mut connection)?;
+    pub async fn find(tenant_id: Uuid, id: i32) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let setting = settings::table.filter(settings::id.eq(id)).first(&mut conn).await?;
+        Ok(setting)
+    }
+
+    pub async fn find_by_title(tenant_id: Uuid, title: String) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let setting = settings::table.filter(settings::title.eq(title)).first(&mut conn).await?;
+        Ok(setting)
+    }
+
+    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let settings = settings::table.load(&mut conn).await?;
         Ok(settings)
     }
 
-    pub fn find_by_title(tenant_id: Uuid, title: String) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
-        let settings = settings::table.filter(settings::title.eq(title)).first(&mut connection)?;
-        Ok(settings)
+    pub async fn create(tenant_id: Uuid, setting: DbSetting) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let db_setting = diesel::insert_into(settings::table)
+            .values(setting)
+            .get_result(&mut conn).await?;
+        Ok(db_setting)
     }
 
-    pub fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
-        let settings = settings::table.load(&mut connection)?;
-        Ok(settings)
-    }
+    pub async fn update(tenant_id: Uuid, id: i32, setting: DbSetting) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
-    pub fn create(tenant_id: Uuid, settings: DbSetting) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
-        let db_settings = diesel::insert_into(settings::table)
-            .values(settings)
-            .get_result(&mut connection)?;
-        Ok(db_settings)
-    }
-
-    pub fn update(tenant_id: Uuid, id: i32, settings: DbSetting) -> Result<Self, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
-        let db_settings = diesel::update(settings::table)
+        let db_setting = diesel::update(settings::table)
             .filter(settings::id.eq(id))
-            .set(settings)
-            .get_result(&mut connection)?;
-        Ok(db_settings)
+            .set(setting)
+            .get_result(&mut conn).await?;
+        Ok(db_setting)
     }
 
-    pub fn delete(tenant_id: Uuid, id: i32) -> Result<usize, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
+    pub async fn delete(tenant_id: Uuid, id: i32) -> Result<usize, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
         let res = diesel::delete(
                 settings::table.filter(settings::id.eq(id))
             )
-            .execute(&mut connection)?;
+            .execute(&mut conn).await?;
         Ok(res)
     }
 
-    pub fn delete_by_title(tenant_id: Uuid, title: &str) -> Result<usize, ShopsterError> {
-        let mut connection = aquire_database(tenant_id)?;
-        
+    pub async fn delete_by_title(tenant_id: Uuid, title: &str) -> Result<usize, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
         let res = diesel::delete(
                 settings::table.filter(settings::title.eq(title))
             )
-            .execute(&mut connection)?;
+            .execute(&mut conn).await?;
         Ok(res)
     }
 }

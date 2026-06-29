@@ -8,9 +8,9 @@ use uuid::Uuid;
 
 use crate::common::{test_harness, test_harness_two_tenants};
 
-#[test]
-fn customer_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn customer_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("basket_test".to_string()).unwrap();
@@ -32,16 +32,15 @@ fn customer_test() {
             updated_at: None,
         };
 
-        let customer = customers.insert(&new_customer).unwrap();
+        let customer = customers.insert(&new_customer).await.unwrap();
 
-        let mut all_customers = customers.get_all().unwrap();
+        let mut all_customers = customers.get_all().await.unwrap();
         assert_eq!(1, all_customers.len());
 
         let inserted_customer = all_customers.first().unwrap();
         assert_eq!(new_customer.email, inserted_customer.email);
         assert_eq!(new_customer.email_verified, inserted_customer.email_verified);
         assert_eq!(new_customer.encryption_mode, inserted_customer.encryption_mode);
-        //assert_eq!(new_customer.password, inserted_customer.password); // Only Hash is returned
         assert_eq!(new_customer.full_name, inserted_customer.full_name);
 
         let inserted_customer = all_customers.first().unwrap();
@@ -49,16 +48,18 @@ fn customer_test() {
             email: "dummy@stecug.de".to_string(),
             email_verified: false,
             full_name: inserted_customer.full_name.clone(),
-        }).unwrap();
+        }).await.unwrap();
 
-        let success = customers.remove(all_customers.first().unwrap().id).unwrap();
+        let success = customers.remove(all_customers.first().unwrap().id).await.unwrap();
         assert_eq!(true, success);
-    });
+
+        let _ = customer;
+    }).await;
 }
 
-#[test]
-fn find_customer_by_email_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn find_customer_by_email_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("find_by_email_test".to_string()).unwrap();
@@ -70,7 +71,6 @@ fn find_customer_by_email_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let test_email = "find_test@example.com".to_string();
         let new_customer = Customer {
             id: Default::default(),
@@ -83,24 +83,21 @@ fn find_customer_by_email_test() {
             updated_at: None,
         };
 
-        customers.insert(&new_customer).unwrap();
+        customers.insert(&new_customer).await.unwrap();
 
-        // Suchen des Kunden anhand der E-Mail
-        let found_customer = customers.find_by_email(test_email).unwrap();
+        let found_customer = customers.find_by_email(test_email).await.unwrap();
 
-        // Überprüfen der Ergebnisse
         assert_eq!(new_customer.email, found_customer.email);
         assert_eq!(new_customer.full_name, found_customer.full_name);
         assert_eq!(new_customer.email_verified, found_customer.email_verified);
 
-        // Aufräumen
-        customers.remove(found_customer.id).unwrap();
-    });
+        customers.remove(found_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn verify_password_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn verify_password_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("verify_password_test".to_string()).unwrap();
@@ -112,7 +109,6 @@ fn verify_password_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let test_password = "CorrectPassword123";
         let new_customer = Customer {
             id: Default::default(),
@@ -125,24 +121,21 @@ fn verify_password_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Testen der Passwortüberprüfung mit korrektem Passwort
-        let is_valid = customers.verify_password(created_customer.id, test_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, test_password).await.unwrap();
         assert_eq!(true, is_valid);
 
-        // Testen der Passwortüberprüfung mit falschem Passwort
-        let is_valid = customers.verify_password(created_customer.id, "WrongPassword123").unwrap();
+        let is_valid = customers.verify_password(created_customer.id, "WrongPassword123").await.unwrap();
         assert_eq!(false, is_valid);
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn verify_email_password_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn verify_email_password_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("verify_email_password_test".to_string()).unwrap();
@@ -154,7 +147,6 @@ fn verify_email_password_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let test_email = "email_password_test@example.com";
         let test_password = "SecureEmailPassword123";
         let new_customer = Customer {
@@ -168,29 +160,25 @@ fn verify_email_password_test() {
             updated_at: None,
         };
 
-        customers.insert(&new_customer).unwrap();
+        customers.insert(&new_customer).await.unwrap();
 
-        // Testen der kombinierten E-Mail/Passwort-Überprüfung mit korrekten Daten
-        let auth_customer = customers.verify_email_password(test_email.to_string(), test_password).unwrap();
+        let auth_customer = customers.verify_email_password(test_email.to_string(), test_password).await.unwrap();
         assert_eq!(new_customer.email, auth_customer.email);
         assert_eq!(new_customer.full_name, auth_customer.full_name);
 
-        // Testen mit falschem Passwort - sollte einen Fehler zurückgeben
-        let auth_result = customers.verify_email_password(test_email.to_string(), "WrongPassword123");
+        let auth_result = customers.verify_email_password(test_email.to_string(), "WrongPassword123").await;
         assert!(auth_result.is_err());
 
-        // Testen mit falscher E-Mail - sollte einen Fehler zurückgeben
-        let auth_result = customers.verify_email_password("wrong@example.com".to_string(), test_password);
+        let auth_result = customers.verify_email_password("wrong@example.com".to_string(), test_password).await;
         assert!(auth_result.is_err());
 
-        // Aufräumen
-        customers.remove(auth_customer.id).unwrap();
-    });
+        customers.remove(auth_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn change_password_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn change_password_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("change_password_test".to_string()).unwrap();
@@ -202,7 +190,6 @@ fn change_password_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let old_password = "OldPassword123";
         let new_password = "NewPassword456";
         let new_customer = Customer {
@@ -216,36 +203,30 @@ fn change_password_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Überprüfen, dass das alte Passwort funktioniert
-        let is_valid = customers.verify_password(created_customer.id, old_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, old_password).await.unwrap();
         assert_eq!(true, is_valid);
 
-        // Passwort ändern
-        let change_result = customers.change_password(created_customer.id, old_password, new_password).unwrap();
+        let change_result = customers.change_password(created_customer.id, old_password, new_password).await.unwrap();
         assert_eq!(true, change_result);
 
-        // Überprüfen, dass das alte Passwort nicht mehr funktioniert
-        let is_valid = customers.verify_password(created_customer.id, old_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, old_password).await.unwrap();
         assert_eq!(false, is_valid);
 
-        // Überprüfen, dass das neue Passwort funktioniert
-        let is_valid = customers.verify_password(created_customer.id, new_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, new_password).await.unwrap();
         assert_eq!(true, is_valid);
 
-        // Testen mit falschem aktuellen Passwort - sollte einen Fehler zurückgeben
-        let change_result = customers.change_password(created_customer.id, "WrongCurrentPassword", "AnotherNewPassword");
+        let change_result = customers.change_password(created_customer.id, "WrongCurrentPassword", "AnotherNewPassword").await;
         assert!(change_result.is_err());
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn reset_password_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn reset_password_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("reset_password_test".to_string()).unwrap();
@@ -257,7 +238,6 @@ fn reset_password_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let old_password = "OriginalPassword123";
         let reset_password = "ResetPassword789";
         let test_email = "reset_password@example.com";
@@ -272,36 +252,30 @@ fn reset_password_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Überprüfen, dass das alte Passwort funktioniert
-        let is_valid = customers.verify_password(created_customer.id, old_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, old_password).await.unwrap();
         assert_eq!(true, is_valid);
 
-        // Passwort zurücksetzen
-        let reset_result = customers.reset_password(test_email.to_string(), reset_password).unwrap();
+        let reset_result = customers.reset_password(test_email.to_string(), reset_password).await.unwrap();
         assert_eq!(true, reset_result);
 
-        // Überprüfen, dass das alte Passwort nicht mehr funktioniert
-        let is_valid = customers.verify_password(created_customer.id, old_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, old_password).await.unwrap();
         assert_eq!(false, is_valid);
 
-        // Überprüfen, dass das zurückgesetzte Passwort funktioniert
-        let is_valid = customers.verify_password(created_customer.id, reset_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, reset_password).await.unwrap();
         assert_eq!(true, is_valid);
 
-        // Testen mit nicht existierender E-Mail - sollte einen Fehler zurückgeben
-        let reset_result = customers.reset_password("nonexistent@example.com".to_string(), "AnyPassword");
+        let reset_result = customers.reset_password("nonexistent@example.com".to_string(), "AnyPassword").await;
         assert!(reset_result.is_err());
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn request_password_reset_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn request_password_reset_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("request_reset_test".to_string()).unwrap();
@@ -313,7 +287,6 @@ fn request_password_reset_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let test_email = "request_reset@example.com";
         let new_customer = Customer {
             id: Default::default(),
@@ -326,24 +299,21 @@ fn request_password_reset_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Passwort-Reset anfordern
-        let request_result = customers.request_password_reset(test_email.to_string()).unwrap();
+        let request_result = customers.request_password_reset(test_email.to_string()).await.unwrap();
         assert_eq!(true, request_result);
 
-        // Testen mit nicht existierender E-Mail - sollte einen Fehler zurückgeben
-        let request_result = customers.request_password_reset("nonexistent@example.com".to_string());
+        let request_result = customers.request_password_reset("nonexistent@example.com".to_string()).await;
         assert!(request_result.is_err());
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn verify_email_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn verify_email_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("verify_email_test".to_string()).unwrap();
@@ -355,11 +325,10 @@ fn verify_email_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden mit nicht verifizierter E-Mail
         let new_customer = Customer {
             id: Default::default(),
             email: "verify_email@example.com".to_string(),
-            email_verified: false,  // Nicht verifiziert
+            email_verified: false,
             encryption_mode: EncryptionModes::Argon2,
             password: "VerifyEmailPassword".to_string(),
             full_name: "Verify Email Test User".to_string(),
@@ -367,25 +336,22 @@ fn verify_email_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
         assert_eq!(false, created_customer.email_verified);
 
-        // E-Mail verifizieren
-        let verified_customer = customers.verify_email(created_customer.id).unwrap();
+        let verified_customer = customers.verify_email(created_customer.id).await.unwrap();
         assert_eq!(true, verified_customer.email_verified);
 
-        // Überprüfen, dass die Verifizierung in der Datenbank gespeichert wurde
-        let retrieved_customer = customers.get(created_customer.id).unwrap();
+        let retrieved_customer = customers.get(created_customer.id).await.unwrap();
         assert_eq!(true, retrieved_customer.email_verified);
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn count_customers_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn count_customers_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("count_customers_test".to_string()).unwrap();
@@ -397,11 +363,9 @@ fn count_customers_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Anfangs sollten keine Kunden vorhanden sein
-        let initial_count = customers.count_customers().unwrap();
+        let initial_count = customers.count_customers().await.unwrap();
         assert_eq!(0, initial_count);
 
-        // Erstellen von drei Test-Kunden
         for i in 1..=3 {
             let new_customer = Customer {
                 id: Default::default(),
@@ -413,33 +377,28 @@ fn count_customers_test() {
                 created_at: Default::default(),
                 updated_at: None,
             };
-
-            customers.insert(&new_customer).unwrap();
+            customers.insert(&new_customer).await.unwrap();
         }
 
-        // Es sollten jetzt drei Kunden sein
-        let count_after_insert = customers.count_customers().unwrap();
+        let count_after_insert = customers.count_customers().await.unwrap();
         assert_eq!(3, count_after_insert);
 
-        // Einen Kunden löschen
-        let all_customers = customers.get_all().unwrap();
-        customers.remove(all_customers[0].id).unwrap();
+        let all_customers = customers.get_all().await.unwrap();
+        customers.remove(all_customers[0].id).await.unwrap();
 
-        // Es sollten jetzt zwei Kunden sein
-        let count_after_delete = customers.count_customers().unwrap();
+        let count_after_delete = customers.count_customers().await.unwrap();
         assert_eq!(2, count_after_delete);
 
-        // Aufräumen - restliche Kunden löschen
-        let remaining_customers = customers.get_all().unwrap();
+        let remaining_customers = customers.get_all().await.unwrap();
         for customer in remaining_customers {
-            customers.remove(customer.id).unwrap();
+            customers.remove(customer.id).await.unwrap();
         }
-    });
+    }).await;
 }
 
-#[test]
-fn search_customers_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn search_customers_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("search_customers_test".to_string()).unwrap();
@@ -451,7 +410,6 @@ fn search_customers_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen einiger Test-Kunden mit unterschiedlichen Namen und E-Mails
         let test_customers = vec![
             Customer {
                 id: Default::default(),
@@ -486,38 +444,33 @@ fn search_customers_test() {
         ];
 
         for customer in &test_customers {
-            customers.insert(customer).unwrap();
+            customers.insert(customer).await.unwrap();
         }
 
-        // Suche nach "john" - sollte einen Treffer geben
-        let john_results = customers.search_customers("john").unwrap();
+        let john_results = customers.search_customers("john").await.unwrap();
         assert_eq!(1, john_results.len());
         assert_eq!("John Doe", john_results[0].full_name);
 
-        // Suche nach "smith" - sollte einen Treffer geben
-        let smith_results = customers.search_customers("smith").unwrap();
+        let smith_results = customers.search_customers("smith").await.unwrap();
         assert_eq!(1, smith_results.len());
         assert_eq!("Jane Smith", smith_results[0].full_name);
 
-        // Suche nach "@example.com" - sollte alle drei Treffer geben
-        let example_results = customers.search_customers("@example.com").unwrap();
+        let example_results = customers.search_customers("@example.com").await.unwrap();
         assert_eq!(3, example_results.len());
 
-        // Suche nach etwas, das nicht existiert
-        let no_results = customers.search_customers("nonexistent").unwrap();
+        let no_results = customers.search_customers("nonexistent").await.unwrap();
         assert_eq!(0, no_results.len());
 
-        // Aufräumen - alle Kunden löschen
-        let all_customers = customers.get_all().unwrap();
+        let all_customers = customers.get_all().await.unwrap();
         for customer in all_customers {
-            customers.remove(customer.id).unwrap();
+            customers.remove(customer.id).await.unwrap();
         }
-    });
+    }).await;
 }
 
-#[test]
-fn pagination_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn pagination_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("pagination_test".to_string()).unwrap();
@@ -529,7 +482,6 @@ fn pagination_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen von 10 Test-Kunden
         for i in 1..=10 {
             let new_customer = Customer {
                 id: Default::default(),
@@ -541,37 +493,31 @@ fn pagination_test() {
                 created_at: Default::default(),
                 updated_at: None,
             };
-
-            customers.insert(&new_customer).unwrap();
+            customers.insert(&new_customer).await.unwrap();
         }
 
-        // Erste Seite mit 3 Elementen abrufen
-        let page1 = customers.get_customers_with_pagination(1, 3).unwrap();
+        let page1 = customers.get_customers_with_pagination(1, 3).await.unwrap();
         assert_eq!(3, page1.len());
 
-        // Zweite Seite mit 3 Elementen abrufen
-        let page2 = customers.get_customers_with_pagination(2, 3).unwrap();
+        let page2 = customers.get_customers_with_pagination(2, 3).await.unwrap();
         assert_eq!(3, page2.len());
 
-        // Vierte Seite mit 3 Elementen abrufen (sollte nur 1 Element enthalten)
-        let page4 = customers.get_customers_with_pagination(4, 3).unwrap();
+        let page4 = customers.get_customers_with_pagination(4, 3).await.unwrap();
         assert_eq!(1, page4.len());
 
-        // Fünfte Seite sollte leer sein
-        let page5 = customers.get_customers_with_pagination(5, 3).unwrap();
+        let page5 = customers.get_customers_with_pagination(5, 3).await.unwrap();
         assert_eq!(0, page5.len());
 
-        // Aufräumen - alle Kunden löschen
-        let all_customers = customers.get_all().unwrap();
+        let all_customers = customers.get_all().await.unwrap();
         for customer in all_customers {
-            customers.remove(customer.id).unwrap();
+            customers.remove(customer.id).await.unwrap();
         }
-    });
+    }).await;
 }
 
-#[test]
-fn error_handling_tests() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn error_handling_tests() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("error_test".to_string()).unwrap();
@@ -583,16 +529,13 @@ fn error_handling_tests() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Versuche, einen nicht existierenden Kunden zu finden
         let non_existent_id = Uuid::new_v4();
-        let get_result = customers.get(non_existent_id);
+        let get_result = customers.get(non_existent_id).await;
         assert!(get_result.is_err());
 
-        // Versuche, einen Kunden mit einer nicht existierenden E-Mail zu finden
-        let find_result = customers.find_by_email("nonexistent@example.com".to_string());
+        let find_result = customers.find_by_email("nonexistent@example.com".to_string()).await;
         assert!(find_result.is_err());
 
-        // Erstelle einen Test-Kunden
         let new_customer = Customer {
             id: Default::default(),
             email: "error_test@example.com".to_string(),
@@ -604,12 +547,11 @@ fn error_handling_tests() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Versuche, einen Kunden mit einer bereits vorhandenen E-Mail einzufügen (sollte Fehler geben)
         let duplicate_customer = Customer {
             id: Default::default(),
-            email: "error_test@example.com".to_string(), // Gleiche E-Mail
+            email: "error_test@example.com".to_string(),
             email_verified: true,
             encryption_mode: EncryptionModes::Argon2,
             password: "AnotherPassword".to_string(),
@@ -618,21 +560,19 @@ fn error_handling_tests() {
             updated_at: None,
         };
 
-        let insert_result = customers.insert(&duplicate_customer);
+        let insert_result = customers.insert(&duplicate_customer).await;
         assert!(insert_result.is_err());
 
-        // Versuche, das Passwort mit falschen Zugangsdaten zu ändern
-        let change_result = customers.change_password(created_customer.id, "WrongPassword", "NewPassword");
+        let change_result = customers.change_password(created_customer.id, "WrongPassword", "NewPassword").await;
         assert!(change_result.is_err());
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn unique_email_constraint_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn unique_email_constraint_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("unique_email_test".to_string()).unwrap();
@@ -644,7 +584,6 @@ fn unique_email_constraint_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let test_email = "unique@example.com";
         let new_customer = Customer {
             id: Default::default(),
@@ -657,12 +596,11 @@ fn unique_email_constraint_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Versuche, einen anderen Kunden mit der gleichen E-Mail-Adresse zu erstellen
         let duplicate_customer = Customer {
             id: Default::default(),
-            email: test_email.to_string(),  // Gleiche E-Mail
+            email: test_email.to_string(),
             email_verified: false,
             encryption_mode: EncryptionModes::Argon2,
             password: "DifferentPassword".to_string(),
@@ -671,19 +609,16 @@ fn unique_email_constraint_test() {
             updated_at: None,
         };
 
-        let insert_result = customers.insert(&duplicate_customer);
-
-        // Sollte fehlschlagen, da die E-Mail-Adresse eindeutig sein muss
+        let insert_result = customers.insert(&duplicate_customer).await;
         assert!(insert_result.is_err());
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn update_customer_properties_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn update_customer_properties_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("update_properties_test".to_string()).unwrap();
@@ -695,7 +630,6 @@ fn update_customer_properties_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden
         let new_customer = Customer {
             id: Default::default(),
             email: "update_test@example.com".to_string(),
@@ -707,34 +641,30 @@ fn update_customer_properties_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
         let result = customers.update(created_customer.id, &CustomerProfile {
             email: "updated@example.com".to_string(),
             full_name: "Updated Full Name".to_string(),
             email_verified: false,
-        }).unwrap();
+        }).await.unwrap();
 
-        // Überprüfen der aktualisierten Eigenschaften
         assert_eq!("updated@example.com", result.email);
         assert_eq!("Updated Full Name", result.full_name);
         assert_eq!(false, result.email_verified);
 
-        // Abrufen des Kunden, um zu überprüfen, dass die Änderungen gespeichert wurden
-        let retrieved_customer = customers.get(created_customer.id).unwrap();
+        let retrieved_customer = customers.get(created_customer.id).await.unwrap();
         assert_eq!("updated@example.com", retrieved_customer.email);
         assert_eq!("Updated Full Name", retrieved_customer.full_name);
         assert_eq!(false, retrieved_customer.email_verified);
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-// Test für Passwort-Hash-Überprüfung
-#[test]
-fn password_hashing_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn password_hashing_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("password_hash_test".to_string()).unwrap();
@@ -746,7 +676,6 @@ fn password_hashing_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen eines Test-Kunden mit einem einfachen Passwort
         let plain_password = "SimplePassword123";
         let new_customer = Customer {
             id: Default::default(),
@@ -759,24 +688,21 @@ fn password_hashing_test() {
             updated_at: None,
         };
 
-        let created_customer = customers.insert(&new_customer).unwrap();
+        let created_customer = customers.insert(&new_customer).await.unwrap();
 
-        // Das gespeicherte Passwort sollte ein Hash sein, nicht der Klartext
         assert_ne!(plain_password, created_customer.password);
-        assert!(created_customer.password.starts_with("$argon2")); // Typischer Anfang eines Argon2-Hashes
+        assert!(created_customer.password.starts_with("$argon2"));
 
-        // Trotzdem sollte die Passwortüberprüfung funktionieren
-        let is_valid = customers.verify_password(created_customer.id, plain_password).unwrap();
+        let is_valid = customers.verify_password(created_customer.id, plain_password).await.unwrap();
         assert_eq!(true, is_valid);
 
-        // Aufräumen
-        customers.remove(created_customer.id).unwrap();
-    });
+        customers.remove(created_customer.id).await.unwrap();
+    }).await;
 }
 
-#[test]
-fn get_all_empty_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn get_all_empty_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("empty_get_all_test".to_string()).unwrap();
@@ -788,15 +714,14 @@ fn get_all_empty_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Überprüfen, dass get_all eine leere Liste zurückgibt, wenn keine Kunden existieren
-        let empty_customers = customers.get_all().unwrap();
+        let empty_customers = customers.get_all().await.unwrap();
         assert_eq!(0, empty_customers.len());
-    });
+    }).await;
 }
 
-#[test]
-fn search_pagination_integration_test() {
-    test_harness(|tenet_connection_string, shopster_connection_string| {
+#[tokio::test]
+async fn search_pagination_integration_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
         let tenant = tenet.create_tenant("search_pagination_test".to_string()).unwrap();
@@ -808,7 +733,6 @@ fn search_pagination_integration_test() {
 
         let customers = shopster.customers(tenant.id).unwrap();
 
-        // Erstellen von 10 Test-Kunden, wobei 5 davon "searchable" im Namen haben
         for i in 1..=10 {
             let name = if i % 2 == 0 {
                 format!("Searchable User {}", i)
@@ -827,45 +751,35 @@ fn search_pagination_integration_test() {
                 updated_at: None,
             };
 
-            customers.insert(&new_customer).unwrap();
+            customers.insert(&new_customer).await.unwrap();
         }
 
-        // Suchen nach "Searchable" und Überprüfen, dass 5 Ergebnisse zurückgegeben werden
-        let search_results = customers.search_customers("Searchable").unwrap();
+        let search_results = customers.search_customers("Searchable").await.unwrap();
         assert_eq!(5, search_results.len());
 
-        // Abrufen der ersten Seite mit 3 Elementen aus der Suche
-        // Hierfür kombinieren wir die Suche mit Paginierung
-        let search_results = customers.search_customers("Searchable").unwrap();
+        let search_results = customers.search_customers("Searchable").await.unwrap();
         let search_ids: Vec<Uuid> = search_results.iter().map(|c| c.id).collect();
 
-        // Abrufen aller Kunden mit Paginierung
-        let page1 = customers.get_customers_with_pagination(1, 3).unwrap();
+        let page1 = customers.get_customers_with_pagination(1, 3).await.unwrap();
 
-        // Filtern der ersten Seite nach den IDs aus der Suche
         let page1_search_results: Vec<&Customer> = page1.iter()
             .filter(|c| search_ids.contains(&c.id))
             .collect();
 
-        // Je nach Sortierung könnten unterschiedlich viele Ergebnisse zurückgegeben werden
-        // Wir überprüfen nur, dass die Anzahl <= 3 ist (die Seitengröße)
         assert!(page1_search_results.len() <= 3);
 
-        // Aufräumen - alle Kunden löschen
-        let all_customers = customers.get_all().unwrap();
+        let all_customers = customers.get_all().await.unwrap();
         for customer in all_customers {
-            customers.remove(customer.id).unwrap();
+            customers.remove(customer.id).await.unwrap();
         }
-    });
+    }).await;
 }
 
-#[test]
-fn tenant_isolation_test() {
-    // Test, um sicherzustellen, dass Kunden zwischen Mandanten isoliert sind
-    test_harness_two_tenants(|tenet_connection_string, shopster_connection_string1, shopster_connection_string2| {
+#[tokio::test]
+async fn tenant_isolation_test() {
+    test_harness_two_tenants(|tenet_connection_string, shopster_connection_string1, shopster_connection_string2| async move {
         let tenet = Tenet::new(tenet_connection_string);
 
-        // Erstellen von zwei Mandanten
         let tenant1 = tenet.create_tenant("tenant1_isolation_test".to_string()).unwrap();
         let tenant2 = tenet.create_tenant("tenant2_isolation_test".to_string()).unwrap();
 
@@ -881,7 +795,6 @@ fn tenant_isolation_test() {
         let customers1 = shopster.customers(tenant1.id).unwrap();
         let customers2 = shopster.customers(tenant2.id).unwrap();
 
-        // Erstellen eines Kunden für Mandant 1
         let customer1 = Customer {
             id: Default::default(),
             email: "tenant1@example.com".to_string(),
@@ -892,9 +805,8 @@ fn tenant_isolation_test() {
             created_at: Default::default(),
             updated_at: None,
         };
-        customers1.insert(&customer1).unwrap();
+        customers1.insert(&customer1).await.unwrap();
 
-        // Erstellen eines Kunden für Mandant 2
         let customer2 = Customer {
             id: Default::default(),
             email: "tenant2@example.com".to_string(),
@@ -905,11 +817,10 @@ fn tenant_isolation_test() {
             created_at: Default::default(),
             updated_at: None,
         };
-        customers2.insert(&customer2).unwrap();
+        customers2.insert(&customer2).await.unwrap();
 
-        // Überprüfen, dass jeder Mandant nur seinen eigenen Kunden sieht
-        let tenant1_customers = customers1.get_all().unwrap();
-        let tenant2_customers = customers2.get_all().unwrap();
+        let tenant1_customers = customers1.get_all().await.unwrap();
+        let tenant2_customers = customers2.get_all().await.unwrap();
 
         assert_eq!(1, tenant1_customers.len());
         assert_eq!(1, tenant2_customers.len());
@@ -917,8 +828,7 @@ fn tenant_isolation_test() {
         assert_eq!("tenant1@example.com", tenant1_customers[0].email);
         assert_eq!("tenant2@example.com", tenant2_customers[0].email);
 
-        // Aufräumen
-        customers1.remove(tenant1_customers[0].id).unwrap();
-        customers2.remove(tenant2_customers[0].id).unwrap();
-    });
+        customers1.remove(tenant1_customers[0].id).await.unwrap();
+        customers2.remove(tenant2_customers[0].id).await.unwrap();
+    }).await;
 }
