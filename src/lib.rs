@@ -73,8 +73,8 @@ use crate::diesel_migrations::MigrationHarness;
 use crate::postgresql::DatabaseHelper;
 use log::info;
 use std::collections::HashMap;
-use std::sync::OnceLock;
-use tokio::sync::Mutex;
+use std::sync::{Arc, OnceLock};
+use tokio::sync::{Mutex, OnceCell};
 use stec_tenet::Tenet;
 use uuid::Uuid;
 
@@ -92,15 +92,23 @@ pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
 const DATABASE_ACQUISITION_ERROR: &str = "Unable to acquire Database";
 
+/// A connection pool that is created at most once, even under concurrent access.
+type PoolCell = Arc<OnceCell<DbPool>>;
+
 /// Manages database connections for multiple tenants in a multi-tenant system.
 ///
 /// `DatabaseSelector` handles tenant-to-database mapping, connection pooling, and
 /// automatic schema migrations. It maintains a cache of connection pools, creating
 /// new pools on-demand when a tenant is first accessed.
+///
+/// The cache map itself is only locked briefly to fetch-or-insert a per-tenant
+/// [`PoolCell`]; the expensive work (tenant lookup, `CREATE DATABASE`, running
+/// migrations, building the pool) happens inside that cell's `get_or_try_init`,
+/// so concurrent lookups for *different* tenants don't block each other.
 #[derive(Debug)]
 pub struct DatabaseSelector {
     tenants: Tenet,
-    database_cache: HashMap<Uuid, DbPool>
+    database_cache: Mutex<HashMap<Uuid, PoolCell>>
 }
 
 impl DatabaseSelector {
@@ -108,7 +116,7 @@ impl DatabaseSelector {
     pub fn new(tenet: Tenet) -> Self {
         DatabaseSelector {
             tenants: tenet,
-            database_cache: HashMap::new()
+            database_cache: Mutex::new(HashMap::new())
         }
     }
 
@@ -116,7 +124,7 @@ impl DatabaseSelector {
     ///
     /// Runs migrations synchronously on a temporary connection, then builds
     /// the async connection pool. Returns the generated tenant ID.
-    pub async fn add_default(&mut self, connection_string: String) -> Result<Uuid, ShopsterError> {
+    pub async fn add_default(&self, connection_string: String) -> Result<Uuid, ShopsterError> {
         info!("Initializing default Database");
 
         {
@@ -133,7 +141,9 @@ impl DatabaseSelector {
             .map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let tenant_id = Uuid::new_v4();
-        self.database_cache.insert(tenant_id, pool);
+        let cell = Arc::new(OnceCell::new());
+        let _ = cell.set(pool);
+        self.database_cache.lock().await.insert(tenant_id, cell);
 
         Ok(tenant_id)
     }
@@ -142,8 +152,13 @@ impl DatabaseSelector {
     ///
     /// Caches pools per tenant. On first access: fetches tenant metadata,
     /// creates the database if missing, runs migrations, and caches the pool.
-    pub async fn get_storage_for_tenant(&mut self, tenant_id: Uuid) -> Result<DbPool, ShopsterError> {
-        if !self.database_cache.contains_key(&tenant_id) {
+    pub async fn get_storage_for_tenant(&self, tenant_id: Uuid) -> Result<DbPool, ShopsterError> {
+        let cell = {
+            let mut cache = self.database_cache.lock().await;
+            cache.entry(tenant_id).or_insert_with(|| Arc::new(OnceCell::new())).clone()
+        };
+
+        let pool = cell.get_or_try_init(|| async {
             info!("Initializing Database");
 
             let tenant = self.tenants.get_tenant_by_id(tenant_id).ok_or(ShopsterError::TenantNotFoundError)?;
@@ -178,27 +193,24 @@ impl DatabaseSelector {
             }
 
             let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&connection_string);
-            let pool = Pool::builder()
+            Pool::builder()
                 .build(manager)
                 .await
-                .map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+                .map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))
+        }).await?;
 
-            self.database_cache.insert(tenant.id, pool);
-        }
-
-        Ok(self.database_cache.get(&tenant_id).unwrap().clone())
+        Ok(pool.clone())
     }
 }
 
-static DATABASE_SELECTOR: OnceLock<Mutex<DatabaseSelector>> = OnceLock::new();
+static DATABASE_SELECTOR: OnceLock<DatabaseSelector> = OnceLock::new();
 
 /// Acquires a connection pool for the given tenant from the global selector.
 pub(crate) async fn aquire_pool(tenant_id: Uuid) -> Result<DbPool, ShopsterError> {
-    let mut database_selector = DATABASE_SELECTOR.get()
+    DATABASE_SELECTOR.get()
         .expect(DATABASE_ACQUISITION_ERROR)
-        .lock()
-        .await;
-    database_selector.get_storage_for_tenant(tenant_id).await
+        .get_storage_for_tenant(tenant_id)
+        .await
 }
 
 
@@ -219,7 +231,7 @@ pub struct Shopster { }
 impl Shopster {
     /// Creates a new `Shopster` instance and initializes the global database selector.
     pub fn new(database_selector: DatabaseSelector) -> Self {
-        if let Err(e) = DATABASE_SELECTOR.set(Mutex::new(database_selector)) {
+        if let Err(e) = DATABASE_SELECTOR.set(database_selector) {
             warn!("{:?}", e);
         }
         Shopster { }
