@@ -27,7 +27,8 @@ pub enum DbOrderStatus {
     InProgress,
     ReadyToShip,
     Shipping,
-    Done
+    Done,
+    Cancelled
 }
 
 impl fmt::Display for DbOrderStatus {
@@ -44,6 +45,7 @@ impl ToSql<crate::schema::sql_types::DbOrderStatus, Pg> for DbOrderStatus {
             DbOrderStatus::ReadyToShip => out.write_all(b"ReadyToShip")?,
             DbOrderStatus::Shipping => out.write_all(b"Shipping")?,
             DbOrderStatus::Done => out.write_all(b"Done")?,
+            DbOrderStatus::Cancelled => out.write_all(b"Cancelled")?,
         }
         Ok(IsNull::No)
     }
@@ -57,6 +59,7 @@ impl FromSql<crate::schema::sql_types::DbOrderStatus, Pg> for DbOrderStatus {
             b"ReadyToShip" => Ok(DbOrderStatus::ReadyToShip),
             b"Shipping" => Ok(DbOrderStatus::Shipping),
             b"Done" => Ok(DbOrderStatus::Done),
+            b"Cancelled" => Ok(DbOrderStatus::Cancelled),
             _ => Err("Unrecognized enum variant".into()),
         }
     }
@@ -70,6 +73,7 @@ impl From<&DbOrderStatus> for i32 {
             DbOrderStatus::ReadyToShip => 2,
             DbOrderStatus::Shipping => 3,
             DbOrderStatus::Done => 4,
+            DbOrderStatus::Cancelled => 5,
         }
     }
 }
@@ -84,7 +88,72 @@ impl TryFrom<i32> for DbOrderStatus {
             2 => Ok(DbOrderStatus::ReadyToShip),
             3 => Ok(DbOrderStatus::Shipping),
             4 => Ok(DbOrderStatus::Done),
+            5 => Ok(DbOrderStatus::Cancelled),
             _ => Err(format!("Unknown order status: {}", status))
+        }
+    }
+}
+
+#[derive(Debug, AsExpression, FromSqlRow, Serialize, Deserialize, PartialEq, PartialOrd, Copy, Clone)]
+#[diesel(sql_type = crate::schema::sql_types::DbPaymentStatus)]
+pub enum DbPaymentStatus {
+    Pending,
+    Paid,
+    Failed,
+    Refunded
+}
+
+impl fmt::Display for DbPaymentStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl ToSql<crate::schema::sql_types::DbPaymentStatus, Pg> for DbPaymentStatus {
+    fn to_sql<'b>(&'b self, out: &mut Output<'b, '_, Pg>) -> serialize::Result {
+        match *self {
+            DbPaymentStatus::Pending => out.write_all(b"Pending")?,
+            DbPaymentStatus::Paid => out.write_all(b"Paid")?,
+            DbPaymentStatus::Failed => out.write_all(b"Failed")?,
+            DbPaymentStatus::Refunded => out.write_all(b"Refunded")?,
+        }
+        Ok(IsNull::No)
+    }
+}
+
+impl FromSql<crate::schema::sql_types::DbPaymentStatus, Pg> for DbPaymentStatus {
+    fn from_sql(bytes: PgValue) -> deserialize::Result<Self> {
+        match bytes.as_bytes() {
+            b"Pending" => Ok(DbPaymentStatus::Pending),
+            b"Paid" => Ok(DbPaymentStatus::Paid),
+            b"Failed" => Ok(DbPaymentStatus::Failed),
+            b"Refunded" => Ok(DbPaymentStatus::Refunded),
+            _ => Err("Unrecognized enum variant".into()),
+        }
+    }
+}
+
+impl From<&DbPaymentStatus> for i32 {
+    fn from(status: &DbPaymentStatus) -> Self {
+        match status {
+            DbPaymentStatus::Pending => 0,
+            DbPaymentStatus::Paid => 1,
+            DbPaymentStatus::Failed => 2,
+            DbPaymentStatus::Refunded => 3,
+        }
+    }
+}
+
+impl TryFrom<i32> for DbPaymentStatus {
+    type Error = String;
+
+    fn try_from(status: i32) -> Result<Self, Self::Error> {
+        match status {
+            0 => Ok(DbPaymentStatus::Pending),
+            1 => Ok(DbPaymentStatus::Paid),
+            2 => Ok(DbPaymentStatus::Failed),
+            3 => Ok(DbPaymentStatus::Refunded),
+            _ => Err(format!("Unknown payment status: {}", status))
         }
     }
 }
@@ -101,6 +170,7 @@ pub struct DbOrder {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
     pub payment_reference: Option<String>,
+    pub payment_status: DbPaymentStatus,
 }
 
 #[derive(Debug, Serialize, Deserialize, Insertable)]
@@ -113,6 +183,7 @@ pub struct InsertableDbOrder {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
     pub payment_reference: Option<String>,
+    pub payment_status: DbPaymentStatus,
 }
 
 impl From<&DbOrder> for InsertableDbOrder {
@@ -125,6 +196,7 @@ impl From<&DbOrder> for InsertableDbOrder {
             created_at: order.created_at,
             updated_at: order.updated_at,
             payment_reference: order.payment_reference.clone(),
+            payment_status: order.payment_status,
         }
     }
 }
@@ -321,6 +393,17 @@ impl DbOrder {
             .filter(orders::id.eq(id))
             .set(order)
             .get_result(conn).await?;
+        Ok(db_order)
+    }
+
+    pub async fn update_payment_status(tenant_id: Uuid, id: i64, payment_status: DbPaymentStatus) -> Result<Self, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let db_order = diesel::update(orders::table)
+            .filter(orders::id.eq(id))
+            .set(orders::payment_status.eq(payment_status))
+            .get_result(&mut conn).await?;
         Ok(db_order)
     }
 

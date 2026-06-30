@@ -4,9 +4,9 @@ use std::convert::TryFrom;
 use chrono::Utc;
 use uuid::Uuid;
 use stec_tenet::{Storage, Tenet};
-use stec_shopster::{DatabaseSelector, DbOrderStatus, Shopster};
+use stec_shopster::{DatabaseSelector, DbOrderStatus, DbPaymentStatus, Shopster};
 use stec_shopster::customers::Customer;
-use stec_shopster::orders::{Order, OrderItemSnapshot, OrderItemPrice, OrderStatus};
+use stec_shopster::orders::{Order, OrderItemSnapshot, OrderItemPrice, OrderStatus, PaymentStatus};
 use stec_shopster::products::{Price, Product};
 use stec_shopster::warehouse::WarehouseItem;
 use stec_tenet::encryption_modes::EncryptionModes;
@@ -23,6 +23,7 @@ fn make_order(status: OrderStatus) -> Order {
         created_at: Utc::now().naive_utc(),
         updated_at: None,
         payment_reference: None,
+        payment_status: PaymentStatus::Pending,
     }
 }
 
@@ -171,6 +172,7 @@ async fn order_inventory_reservation_on_insert_test() {
             created_at: Utc::now().naive_utc(),
             updated_at: None,
             payment_reference: None,
+            payment_status: PaymentStatus::Pending,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -230,6 +232,7 @@ async fn order_reservation_released_on_shipping_test() {
             created_at: Utc::now().naive_utc(),
             updated_at: None,
             payment_reference: None,
+            payment_status: PaymentStatus::Pending,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -416,6 +419,7 @@ async fn order_remove_releases_reservation_test() {
             created_at: Utc::now().naive_utc(),
             updated_at: None,
             payment_reference: None,
+            payment_status: PaymentStatus::Pending,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -442,6 +446,7 @@ fn test_valid_order_status_conversions() {
     assert_eq!(DbOrderStatus::try_from(2).unwrap(), DbOrderStatus::ReadyToShip);
     assert_eq!(DbOrderStatus::try_from(3).unwrap(), DbOrderStatus::Shipping);
     assert_eq!(DbOrderStatus::try_from(4).unwrap(), DbOrderStatus::Done);
+    assert_eq!(DbOrderStatus::try_from(5).unwrap(), DbOrderStatus::Cancelled);
 }
 
 /// Test that invalid i32 values return errors instead of panicking
@@ -452,7 +457,7 @@ fn test_invalid_order_status_conversions() {
     assert!(DbOrderStatus::try_from(-100).is_err());
 
     // Test out-of-range positive values
-    assert!(DbOrderStatus::try_from(5).is_err());
+    assert!(DbOrderStatus::try_from(6).is_err());
     assert!(DbOrderStatus::try_from(10).is_err());
     assert!(DbOrderStatus::try_from(100).is_err());
     assert!(DbOrderStatus::try_from(i32::MAX).is_err());
@@ -462,7 +467,7 @@ fn test_invalid_order_status_conversions() {
 /// Test that error messages are informative
 #[test]
 fn test_order_status_error_messages() {
-    let invalid_values = vec![-1, 5, 10, 99];
+    let invalid_values = vec![-1, 6, 10, 99];
 
     for val in invalid_values {
         let result = DbOrderStatus::try_from(val);
@@ -490,6 +495,7 @@ fn test_round_trip_conversion() {
         DbOrderStatus::ReadyToShip,
         DbOrderStatus::Shipping,
         DbOrderStatus::Done,
+        DbOrderStatus::Cancelled,
     ];
 
     for original_status in statuses {
@@ -519,7 +525,7 @@ fn test_extreme_values_dont_panic() {
         i32::MIN + 1,
         -1000000,
         -1,
-        5,
+        6,
         1000,
         i32::MAX - 1,
         i32::MAX,
@@ -545,6 +551,7 @@ fn test_status_numeric_mapping() {
         (2, DbOrderStatus::ReadyToShip),
         (3, DbOrderStatus::Shipping),
         (4, DbOrderStatus::Done),
+        (5, DbOrderStatus::Cancelled),
     ];
 
     for (expected_num, status) in mappings {
@@ -561,4 +568,228 @@ fn test_status_numeric_mapping() {
     }
 }
 
+#[tokio::test]
+async fn order_cancel_from_new_releases_reservation_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_cancel_releases".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
 
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+
+        let products = shopster.products(tenant.id).unwrap();
+        let product = products.insert(&make_product_with_price("ART-ORD-005", "5555555555555", 300)).await.unwrap();
+
+        let warehouse = shopster.warehouse(tenant.id).unwrap();
+        warehouse.insert(&WarehouseItem {
+            id: 0,
+            product_id: product.id,
+            in_stock: 10,
+            reserved: 0,
+            created_at: Utc::now().naive_utc(),
+            updated_at: None,
+        }).await.unwrap();
+
+        let order_with_item = Order {
+            id: 0,
+            customer_id: None,
+            status: OrderStatus::New,
+            delivery_address: "Test Street 1, 12345 Testcity".to_string(),
+            billing_address: "Test Street 1, 12345 Testcity".to_string(),
+            items: vec![OrderItemSnapshot {
+                id: 0,
+                product_id: product.id,
+                quantity: 2,
+                article_number: product.article_number.clone(),
+                gtin: product.gtin.clone(),
+                title: product.title.clone(),
+                short_description: product.short_description.clone(),
+                description: product.description.clone(),
+                tags: vec![],
+                title_image: product.image_url.clone(),
+                additional_images: vec![],
+                price: OrderItemPrice { amount: 300, currency: "EUR".to_string() },
+                weight: product.weight,
+            }],
+            created_at: Utc::now().naive_utc(),
+            updated_at: None,
+            payment_reference: None,
+            payment_status: PaymentStatus::Pending,
+        };
+
+        let orders = shopster.orders(tenant.id).unwrap();
+        let mut order = orders.insert(&order_with_item).await.unwrap();
+
+        let wh_after_insert = warehouse.get_by_product_id(product.id).await.unwrap();
+        assert_eq!(2, wh_after_insert.reserved, "Inventory should be reserved for New order");
+
+        order.status = OrderStatus::Cancelled;
+        let cancelled = orders.update(&order).await.unwrap();
+        assert_eq!(OrderStatus::Cancelled, cancelled.status);
+
+        let wh_after_cancel = warehouse.get_by_product_id(product.id).await.unwrap();
+        assert_eq!(0, wh_after_cancel.reserved, "Reservation should be released when order is cancelled");
+    }).await;
+}
+
+#[tokio::test]
+async fn order_cancel_from_each_non_terminal_status_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_cancel_each_status".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+        let orders = shopster.orders(tenant.id).unwrap();
+
+        for starting_status in [
+            OrderStatus::New,
+            OrderStatus::InProgress,
+            OrderStatus::ReadyToShip,
+            OrderStatus::Shipping,
+        ] {
+            let order = orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+
+            let mut current = order;
+            // Walk the order up to the desired starting status before cancelling.
+            let path = [OrderStatus::InProgress, OrderStatus::ReadyToShip, OrderStatus::Shipping];
+            for step in path {
+                if current.status == starting_status {
+                    break;
+                }
+                current.status = step;
+                current = orders.update(&current).await.unwrap();
+            }
+
+            current.status = OrderStatus::Cancelled;
+            let cancelled = orders.update(&current).await.unwrap();
+            assert_eq!(OrderStatus::Cancelled, cancelled.status, "Failed to cancel from {:?}", starting_status);
+        }
+    }).await;
+}
+
+#[tokio::test]
+async fn order_cancel_terminal_states_rejected_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_cancel_terminal".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+        let orders = shopster.orders(tenant.id).unwrap();
+
+        // Done -> Cancelled must be rejected
+        let order = orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        let mut current = order;
+        for step in [OrderStatus::InProgress, OrderStatus::ReadyToShip, OrderStatus::Shipping, OrderStatus::Done] {
+            current.status = step;
+            current = orders.update(&current).await.unwrap();
+        }
+        current.status = OrderStatus::Cancelled;
+        assert!(orders.update(&current).await.is_err(), "Done -> Cancelled should be rejected");
+
+        // Cancelled -> anything must be rejected
+        let order2 = orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        let mut current2 = order2;
+        current2.status = OrderStatus::Cancelled;
+        current2 = orders.update(&current2).await.unwrap();
+        current2.status = OrderStatus::InProgress;
+        assert!(orders.update(&current2).await.is_err(), "Cancelled -> InProgress should be rejected");
+    }).await;
+}
+
+#[tokio::test]
+async fn order_payment_status_defaults_to_pending_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_payment_status_default".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+
+        let orders = shopster.orders(tenant.id).unwrap();
+        let inserted = orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+
+        assert_eq!(PaymentStatus::Pending, inserted.payment_status);
+    }).await;
+}
+
+#[tokio::test]
+async fn order_update_payment_status_independent_of_fulfillment_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_update_payment_status".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+
+        let orders = shopster.orders(tenant.id).unwrap();
+        let inserted = orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+
+        // Mark paid without touching fulfillment status, e.g. via a Stripe webhook.
+        let paid = orders.update_payment_status(inserted.id, PaymentStatus::Paid).await.unwrap();
+        assert_eq!(PaymentStatus::Paid, paid.payment_status);
+        assert_eq!(OrderStatus::New, paid.status, "Fulfillment status must not change");
+
+        let fetched = orders.get_by_id(inserted.id).await.unwrap();
+        assert_eq!(PaymentStatus::Paid, fetched.payment_status);
+
+        // An order can later be cancelled after being paid (needs refund).
+        let mut cancel_order = fetched;
+        cancel_order.status = OrderStatus::Cancelled;
+        let cancelled = orders.update(&cancel_order).await.unwrap();
+        assert_eq!(OrderStatus::Cancelled, cancelled.status);
+        assert_eq!(PaymentStatus::Paid, cancelled.payment_status, "Payment status should be untouched by cancellation");
+
+        let refunded = orders.update_payment_status(cancelled.id, PaymentStatus::Refunded).await.unwrap();
+        assert_eq!(PaymentStatus::Refunded, refunded.payment_status);
+        assert_eq!(OrderStatus::Cancelled, refunded.status);
+    }).await;
+}
+
+/// Test successful conversions from valid i32 values to DbPaymentStatus
+#[test]
+fn test_valid_payment_status_conversions() {
+    assert_eq!(DbPaymentStatus::try_from(0).unwrap(), DbPaymentStatus::Pending);
+    assert_eq!(DbPaymentStatus::try_from(1).unwrap(), DbPaymentStatus::Paid);
+    assert_eq!(DbPaymentStatus::try_from(2).unwrap(), DbPaymentStatus::Failed);
+    assert_eq!(DbPaymentStatus::try_from(3).unwrap(), DbPaymentStatus::Refunded);
+}
+
+/// Test that invalid i32 values return errors instead of panicking
+#[test]
+fn test_invalid_payment_status_conversions() {
+    assert!(DbPaymentStatus::try_from(-1).is_err());
+    assert!(DbPaymentStatus::try_from(4).is_err());
+    assert!(DbPaymentStatus::try_from(100).is_err());
+    assert!(DbPaymentStatus::try_from(i32::MAX).is_err());
+    assert!(DbPaymentStatus::try_from(i32::MIN).is_err());
+}
+
+/// Test round-trip conversion: DbPaymentStatus -> i32 -> DbPaymentStatus
+#[test]
+fn test_payment_status_round_trip_conversion() {
+    let statuses = vec![
+        DbPaymentStatus::Pending,
+        DbPaymentStatus::Paid,
+        DbPaymentStatus::Failed,
+        DbPaymentStatus::Refunded,
+    ];
+
+    for original_status in statuses {
+        let as_i32 = i32::from(&original_status);
+        let converted_back = DbPaymentStatus::try_from(as_i32)
+            .expect("Should successfully convert valid i32 back to DbPaymentStatus");
+        assert_eq!(converted_back, original_status, "Round-trip conversion failed for status: {:?}", original_status);
+    }
+}

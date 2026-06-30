@@ -53,9 +53,12 @@ pub mod orders;
 pub mod settings;
 pub mod warehouse;
 pub use orders::OrderStatus;
+pub use orders::PaymentStatus;
 
 #[doc(hidden)]
 pub use postgresql::dborder::DbOrderStatus;
+#[doc(hidden)]
+pub use postgresql::dborder::DbPaymentStatus;
 
 use diesel::PgConnection;
 use diesel::prelude::*;
