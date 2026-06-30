@@ -12,6 +12,7 @@ use crate::baskets::Baskets;
 use crate::postgresql::dborder::DbOrder;
 use crate::postgresql::dborder::DbOrderItem;
 use crate::postgresql::dborder::DbOrderStatus;
+use crate::postgresql::dborder::DbPaymentStatus;
 use crate::postgresql::dbwarehouse::DbWarehouse;
 
 /// The lifecycle status of an order.
@@ -22,6 +23,7 @@ pub enum OrderStatus {
     ReadyToShip,
     Shipping,
     Done,
+    Cancelled,
 }
 
 impl fmt::Display for OrderStatus {
@@ -38,6 +40,7 @@ impl From<DbOrderStatus> for OrderStatus {
             DbOrderStatus::ReadyToShip => OrderStatus::ReadyToShip,
             DbOrderStatus::Shipping => OrderStatus::Shipping,
             DbOrderStatus::Done => OrderStatus::Done,
+            DbOrderStatus::Cancelled => OrderStatus::Cancelled,
         }
     }
 }
@@ -50,6 +53,44 @@ impl From<OrderStatus> for DbOrderStatus {
             OrderStatus::ReadyToShip => DbOrderStatus::ReadyToShip,
             OrderStatus::Shipping => DbOrderStatus::Shipping,
             OrderStatus::Done => DbOrderStatus::Done,
+            OrderStatus::Cancelled => DbOrderStatus::Cancelled,
+        }
+    }
+}
+
+/// The payment status of an order, tracked independently of fulfillment.
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum PaymentStatus {
+    Pending,
+    Paid,
+    Failed,
+    Refunded,
+}
+
+impl fmt::Display for PaymentStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+    }
+}
+
+impl From<DbPaymentStatus> for PaymentStatus {
+    fn from(status: DbPaymentStatus) -> Self {
+        match status {
+            DbPaymentStatus::Pending => PaymentStatus::Pending,
+            DbPaymentStatus::Paid => PaymentStatus::Paid,
+            DbPaymentStatus::Failed => PaymentStatus::Failed,
+            DbPaymentStatus::Refunded => PaymentStatus::Refunded,
+        }
+    }
+}
+
+impl From<PaymentStatus> for DbPaymentStatus {
+    fn from(status: PaymentStatus) -> Self {
+        match status {
+            PaymentStatus::Pending => DbPaymentStatus::Pending,
+            PaymentStatus::Paid => DbPaymentStatus::Paid,
+            PaymentStatus::Failed => DbPaymentStatus::Failed,
+            PaymentStatus::Refunded => DbPaymentStatus::Refunded,
         }
     }
 }
@@ -149,6 +190,7 @@ pub struct Order {
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
     pub payment_reference: Option<String>,
+    pub payment_status: PaymentStatus,
 }
 
 impl From<&Order> for DbOrder {
@@ -162,6 +204,7 @@ impl From<&Order> for DbOrder {
             created_at: Utc::now().naive_utc(),
             updated_at: Some(Utc::now().naive_utc()),
             payment_reference: order.payment_reference.clone(),
+            payment_status: order.payment_status.into(),
         }
     }
 }
@@ -187,6 +230,10 @@ impl Orders {
                 | (OrderStatus::InProgress, OrderStatus::ReadyToShip)
                 | (OrderStatus::ReadyToShip, OrderStatus::Shipping)
                 | (OrderStatus::Shipping, OrderStatus::Done)
+                | (OrderStatus::New, OrderStatus::Cancelled)
+                | (OrderStatus::InProgress, OrderStatus::Cancelled)
+                | (OrderStatus::ReadyToShip, OrderStatus::Cancelled)
+                | (OrderStatus::Shipping, OrderStatus::Cancelled)
         )
     }
 
@@ -208,6 +255,7 @@ impl Orders {
                 created_at: db_order.created_at,
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
+                payment_status: db_order.payment_status.into(),
             });
         }
 
@@ -229,6 +277,7 @@ impl Orders {
             created_at: db_order.created_at,
             updated_at: db_order.updated_at,
             payment_reference: db_order.payment_reference,
+            payment_status: db_order.payment_status.into(),
         })
     }
 
@@ -250,6 +299,7 @@ impl Orders {
                 created_at: db_order.created_at,
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
+                payment_status: db_order.payment_status.into(),
             });
         }
 
@@ -274,6 +324,7 @@ impl Orders {
                 created_at: db_order.created_at,
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
+                payment_status: db_order.payment_status.into(),
             });
         }
 
@@ -297,6 +348,7 @@ impl Orders {
             created_at: db_order.created_at,
             updated_at: db_order.updated_at,
             payment_reference: db_order.payment_reference,
+            payment_status: db_order.payment_status.into(),
         }))
     }
 
@@ -344,6 +396,7 @@ impl Orders {
                 created_at: created_order.created_at,
                 updated_at: created_order.updated_at,
                 payment_reference: created_order.payment_reference,
+                payment_status: created_order.payment_status.into(),
             })
         }).await
     }
@@ -393,6 +446,7 @@ impl Orders {
                 created_at: updated_order.created_at,
                 updated_at: updated_order.updated_at,
                 payment_reference: updated_order.payment_reference,
+                payment_status: updated_order.payment_status.into(),
             })
         }).await
     }
@@ -455,8 +509,33 @@ impl Orders {
             created_at: Utc::now().naive_utc(),
             updated_at: None,
             payment_reference,
+            payment_status: PaymentStatus::Pending,
         };
 
         self.insert(&order).await
+    }
+
+    /// Updates an order's payment status independently of its fulfillment status.
+    ///
+    /// This bypasses fulfillment transition validation, since payment state changes
+    /// (e.g. a Stripe webhook confirming or refunding a payment) are orthogonal to
+    /// the order's shipping lifecycle.
+    pub async fn update_payment_status(&self, order_id: i64, payment_status: PaymentStatus) -> Result<Order, ShopsterError> {
+        let updated_order = DbOrder::update_payment_status(self.tenant_id, order_id, payment_status.into()).await?;
+        let db_items = DbOrderItem::get_for_order(self.tenant_id, updated_order.id).await?;
+        let items = db_items.iter().map(OrderItemSnapshot::from).collect();
+
+        Ok(Order {
+            id: updated_order.id,
+            customer_id: updated_order.customer_id,
+            status: updated_order.status.into(),
+            delivery_address: updated_order.delivery_address,
+            billing_address: updated_order.billing_address,
+            items,
+            created_at: updated_order.created_at,
+            updated_at: updated_order.updated_at,
+            payment_reference: updated_order.payment_reference,
+            payment_status: updated_order.payment_status.into(),
+        })
     }
 }

@@ -177,7 +177,8 @@ baskets.merge_baskets(source, target)
 
 **Key Structures:**
 - `Order`: Complete order with items and addresses
-- `OrderStatus`: Enum for order lifecycle (New → Done)
+- `OrderStatus`: Enum for order fulfillment lifecycle (New → Done, or cancelled at any non-terminal point)
+- `PaymentStatus`: Enum for payment state (Pending, Paid, Failed, Refunded), tracked independently of `OrderStatus`
 - `OrderItemSnapshot`: Historical product snapshot
 - `Orders`: Handler
 
@@ -185,12 +186,16 @@ baskets.merge_baskets(source, target)
 ```
 New → InProgress → ReadyToShip → Shipping → Done
 ```
+Any of `New`, `InProgress`, `ReadyToShip`, `Shipping` may also transition directly to the terminal `Cancelled` status (e.g. customer cancellation, stock unavailable, fraud check failure). No transition is valid out of `Done` or `Cancelled`. Cancelling a reserving order releases its warehouse reservation.
+
+`PaymentStatus` is a separate axis from `OrderStatus` — fulfillment and payment progress independently of each other (e.g. an order can be `Cancelled` while `Paid`, awaiting refund, or `Shipping` while payment is still `Pending` for invoice/COD orders).
 
 **Operations:**
 ```rust
 orders.get_all()
 orders.insert(&order)
-orders.update_status(order_id, new_status)
+orders.update(&order)                                  // fulfillment status transitions, validated
+orders.update_payment_status(order_id, payment_status)  // payment status, independent of fulfillment
 ```
 
 ### `warehouse.rs` - Inventory Management

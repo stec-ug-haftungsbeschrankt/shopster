@@ -4,7 +4,7 @@
 //! `docker ps` to verify Docker is available
 //! `cargo test --test integration_test` to run these tests
 
-use stec_shopster::{Shopster, DatabaseSelector, orders::Order, orders::OrderStatus};
+use stec_shopster::{Shopster, DatabaseSelector, orders::Order, orders::OrderStatus, orders::PaymentStatus};
 use stec_tenet::{Tenet, Storage};
 use uuid::Uuid;
 
@@ -80,6 +80,7 @@ async fn order_test() {
             created_at: Default::default(),
             updated_at: None,
             payment_reference: None,
+            payment_status: PaymentStatus::Pending,
         };
 
         let _ = orders.insert(&new_order).await.unwrap();

@@ -4,6 +4,10 @@ pub mod sql_types {
     #[derive(diesel::sql_types::SqlType)]
     #[diesel(postgres_type(name = "dborderstatus"))]
     pub struct DbOrderStatus;
+
+    #[derive(diesel::sql_types::SqlType)]
+    #[diesel(postgres_type(name = "dbpaymentstatus"))]
+    pub struct DbPaymentStatus;
 }
 
 diesel::table! {
@@ -60,6 +64,7 @@ diesel::table! {
 diesel::table! {
     use diesel::sql_types::*;
     use super::sql_types::DbOrderStatus;
+    use super::sql_types::DbPaymentStatus;
 
     orders (id) {
         id -> Int8,
@@ -70,6 +75,7 @@ diesel::table! {
         created_at -> Timestamp,
         updated_at -> Nullable<Timestamp>,
         payment_reference -> Nullable<Text>,
+        payment_status -> DbPaymentStatus,
     }
 }
 
