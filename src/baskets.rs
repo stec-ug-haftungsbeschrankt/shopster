@@ -1,7 +1,7 @@
 //! Shopping basket management for customers.
 
 use uuid::Uuid;
-use chrono::NaiveDateTime;
+use chrono::{Duration, NaiveDateTime, Utc};
 use diesel_async::AsyncConnection;
 
 use crate::aquire_pool;
@@ -111,15 +111,18 @@ impl Baskets {
         }
         let items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id).await?;
 
-        if let Some(mut item) = items.into_iter().find(|x| x.product_id == product_id) {
+        let id = if let Some(mut item) = items.into_iter().find(|x| x.product_id == product_id) {
             item.quantity = quantity;
             let updated_item = DbBasketProduct::update_basket_item(self.tenant_id, item.id, item).await?;
-            Ok(updated_item.id)
+            updated_item.id
         } else {
             let basket_product = DbBasketProduct { id: 0, product_id, quantity, basket_id };
             let new_item = DbBasketProduct::create_basket_item(self.tenant_id, basket_product).await?;
-            Ok(new_item.id)
-        }
+            new_item.id
+        };
+
+        DbBasket::touch(self.tenant_id, basket_id).await?;
+        Ok(id)
     }
 
     pub async fn update_product_quantity(&self, basket_id: Uuid, basket_product_id: i64, quantity: i64) -> Result<BasketProduct, ShopsterError> {
@@ -138,6 +141,7 @@ impl Baskets {
         updated_product.quantity = quantity;
 
         let result = DbBasketProduct::update_basket_item(self.tenant_id, basket_product_id, updated_product).await?;
+        DbBasket::touch(self.tenant_id, basket_id).await?;
         Ok(BasketProduct::from(&result))
     }
 
@@ -149,6 +153,7 @@ impl Baskets {
         }
 
         let result = DbBasketProduct::delete_basket_item(self.tenant_id, basket_product_id).await?;
+        DbBasket::touch(self.tenant_id, basket_id).await?;
         Ok(result > 0)
     }
 
@@ -220,6 +225,15 @@ impl Baskets {
         }
 
         Ok((total, first_currency))
+    }
+
+    /// Deletes all baskets (and their products) that have been inactive for longer than
+    /// `max_age`. Activity is measured as `COALESCE(updated_at, created_at)`.
+    ///
+    /// Returns the number of baskets deleted.
+    pub async fn delete_older_than(&self, max_age: Duration) -> Result<usize, ShopsterError> {
+        let cutoff = Utc::now().naive_utc() - max_age;
+        DbBasket::delete_older_than(self.tenant_id, cutoff).await
     }
 
     pub async fn merge_baskets(&self, source_basket_id: Uuid, target_basket_id: Uuid) -> Result<(), ShopsterError> {
