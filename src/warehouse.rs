@@ -16,6 +16,9 @@ pub struct WarehouseItem {
     pub reserved: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    /// Per-product low-stock threshold. When `None` the shop-wide default is used
+    /// by [`Warehouse::get_low_stock`].
+    pub low_stock_threshold: Option<i64>,
 }
 
 impl WarehouseItem {
@@ -45,6 +48,7 @@ impl From<&DbWarehouse> for WarehouseItem {
             reserved: db_item.reserved,
             created_at: db_item.created_at,
             updated_at: db_item.updated_at,
+            low_stock_threshold: db_item.low_stock_threshold,
         }
     }
 }
@@ -58,6 +62,7 @@ impl From<&WarehouseItem> for DbWarehouse {
             reserved: item.reserved,
             created_at: Utc::now().naive_utc(),
             updated_at: Some(Utc::now().naive_utc()),
+            low_stock_threshold: item.low_stock_threshold,
         }
     }
 }
@@ -118,6 +123,14 @@ impl Warehouse {
     pub async fn remove_by_product_id(&self, product_id: i64) -> Result<bool, ShopsterError> {
         let result = DbWarehouse::delete_by_product_id(self.tenant_id, product_id).await?;
         Ok(result > 0)
+    }
+
+    /// Returns warehouse items where `available() <= effective_threshold`.
+    ///
+    /// The effective threshold per item is `low_stock_threshold.unwrap_or(default_threshold)`.
+    pub async fn get_low_stock(&self, default_threshold: i64) -> Result<Vec<WarehouseItem>, ShopsterError> {
+        let db_items = DbWarehouse::get_low_stock(self.tenant_id, default_threshold).await?;
+        Ok(db_items.iter().map(WarehouseItem::from).collect())
     }
 
     pub async fn apply_reserved_delta(&self, product_id: i64, delta: i64) -> Result<WarehouseItem, ShopsterError> {

@@ -65,6 +65,7 @@ async fn warehouse_insert_and_get_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         };
         let created = warehouse.insert(&new_item).await.unwrap();
 
@@ -100,6 +101,7 @@ async fn warehouse_get_by_product_id_test() {
             reserved: 5,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let item = warehouse.get_by_product_id(product.id).await.unwrap();
@@ -132,6 +134,7 @@ async fn warehouse_apply_reserved_delta_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         // Reserve 10 units
@@ -173,6 +176,7 @@ async fn warehouse_update_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let updated_item = WarehouseItem {
@@ -208,6 +212,7 @@ async fn warehouse_remove_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let removed = warehouse.remove_by_product_id(product.id).await.unwrap();
@@ -240,6 +245,7 @@ async fn warehouse_get_all_with_details_test() {
             reserved: 5,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let details = warehouse.get_all_with_details().await.unwrap();
