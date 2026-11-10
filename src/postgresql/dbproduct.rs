@@ -76,6 +76,28 @@ impl From<&DbProduct> for InsertableDbProduct {
 
 impl DbProduct {
 
+    pub async fn find_by_article_number(tenant_id: Uuid, article_number: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let product = products::table
+            .filter(products::article_number.eq(article_number))
+            .first(&mut conn).await
+            .optional()?;
+        Ok(product)
+    }
+
+    pub async fn find_by_gtin(tenant_id: Uuid, gtin: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        let product = products::table
+            .filter(products::gtin.eq(gtin))
+            .first(&mut conn).await
+            .optional()?;
+        Ok(product)
+    }
+
     pub async fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {
         let pool = aquire_pool(tenant_id).await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
