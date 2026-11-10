@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.7.0]
+
+### Changed (breaking)
+- Removed the process-wide `DATABASE_SELECTOR` singleton. `Shopster` now owns its `DatabaseSelector` (behind an `Arc`) and hands every domain handler a `TenantDb` handle, so multiple `Shopster` instances (e.g. different Tenet backends, isolated tests) can coexist in one process. A second `Shopster::new` no longer silently reuses the first instance's tenants. ([#39](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/39))
+- `Baskets::new`, `Orders::new`, ... now take a `TenantDb` instead of a tenant `Uuid`; prefer the `Shopster::baskets(tenant_id)` etc. accessors. `ShopsterError::NotInitialized` is no longer produced.
+
+### Added
+- `Shopster::from_shared(Arc<DatabaseSelector>)` and the public `TenantDb` type.
+
+### Dependencies
+- `cargo update` to the latest semver-compatible versions; `aes-gcm` 0.10 -> 0.11.
+
 ## [0.6.0]
 
 ### Security

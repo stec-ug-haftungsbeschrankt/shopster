@@ -1,5 +1,6 @@
 //! Customer management and authentication.
 
+use crate::TenantDb;
 use std::str::FromStr;
 use std::convert::TryFrom;
 
@@ -92,28 +93,28 @@ impl From<&CustomerProfile> for DbProfileMessage {
 
 /// Handler for customer management operations.
 pub struct Customers {
-    tenant_id: Uuid
+    tenant: TenantDb
 }
 
 impl Customers {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Customers { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Customers { tenant }
     }
 
     pub async fn get_all(&self) -> Result<Vec<Customer>, ShopsterError> {
-        let db_customers = DbCustomer::get_all(self.tenant_id).await?;
+        let db_customers = DbCustomer::get_all(&self.tenant).await?;
         let customers = db_customers.iter().map(Customer::try_from).collect::<Result<Vec<_>, _>>()?;
         Ok(customers)
     }
 
     pub async fn get(&self, customer_id: Uuid) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomer::find(self.tenant_id, customer_id).await?;
+        let db_customer = DbCustomer::find(&self.tenant, customer_id).await?;
         let customer = Customer::try_from(&db_customer)?;
         Ok(customer)
     }
 
     pub async fn find_by_email(&self, email: String) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomer::find_by_email(self.tenant_id, email).await?;
+        let db_customer = DbCustomer::find_by_email(&self.tenant, email).await?;
         let customer = Customer::try_from(&db_customer)?;
         Ok(customer)
     }
@@ -125,7 +126,7 @@ impl Customers {
             ));
         }
         let db_customer = DbCustomerMessage::from(customer);
-        let created_customer = DbCustomer::create(self.tenant_id, db_customer).await?;
+        let created_customer = DbCustomer::create(&self.tenant, db_customer).await?;
 
         let reply = Customer::try_from(&created_customer)?;
         Ok(reply)
@@ -138,22 +139,22 @@ impl Customers {
             ));
         }
         let db_profile = DbProfileMessage::from(profile);
-        let updated_customer = DbCustomer::update(self.tenant_id, customer_id, db_profile).await?;
+        let updated_customer = DbCustomer::update(&self.tenant, customer_id, db_profile).await?;
         Ok(Customer::try_from(&updated_customer)?)
     }
 
     pub async fn remove(&self, customer_id: Uuid) -> Result<bool, ShopsterError> {
-        let result = DbCustomer::delete(self.tenant_id, customer_id).await?;
+        let result = DbCustomer::delete(&self.tenant, customer_id).await?;
         Ok(result > 0)
     }
 
     pub async fn verify_password(&self, customer_id: Uuid, password: &str) -> Result<bool, ShopsterError> {
-        let db_customer = DbCustomer::find(self.tenant_id, customer_id).await?;
+        let db_customer = DbCustomer::find(&self.tenant, customer_id).await?;
         db_customer.verify_password(password)
     }
 
     pub async fn verify_email_password(&self, email: String, password: &str) -> Result<Customer, ShopsterError> {
-        let db_customer = match DbCustomer::find_by_email(self.tenant_id, email).await {
+        let db_customer = match DbCustomer::find_by_email(&self.tenant, email).await {
             Ok(customer) => customer,
             Err(ShopsterError::DatabaseError(diesel::result::Error::NotFound)) => {
                 // Unknown e-mail: do the same expensive work and return the same error as
@@ -176,7 +177,7 @@ impl Customers {
         if db_customer.password_needs_rehash() {
             match hash_password_argon2id(password) {
                 Ok(new_hash) => {
-                    if let Err(e) = DbCustomer::update_password(self.tenant_id, db_customer.id, &new_hash, &db_customer.algorithm).await {
+                    if let Err(e) = DbCustomer::update_password(&self.tenant, db_customer.id, &new_hash, &db_customer.algorithm).await {
                         warn!("Could not store upgraded password hash for customer {}: {:?}", db_customer.id, e);
                     }
                 }
@@ -189,7 +190,7 @@ impl Customers {
     }
 
     pub async fn change_password(&self, customer_id: Uuid, current_password: &str, new_password: &str) -> Result<bool, ShopsterError> {
-        let mut db_customer = DbCustomer::find(self.tenant_id, customer_id).await?;
+        let mut db_customer = DbCustomer::find(&self.tenant, customer_id).await?;
 
         let is_valid = db_customer.verify_password(current_password)?;
 
@@ -200,29 +201,29 @@ impl Customers {
         db_customer.password = new_password.to_string();
         db_customer.hash_password()?;
 
-        DbCustomer::update_password(self.tenant_id, customer_id, &db_customer.password, &db_customer.algorithm).await?;
+        DbCustomer::update_password(&self.tenant, customer_id, &db_customer.password, &db_customer.algorithm).await?;
 
         Ok(true)
     }
 
     pub async fn reset_password(&self, email: String, new_password: &str) -> Result<bool, ShopsterError> {
-        let mut db_customer = DbCustomer::find_by_email(self.tenant_id, email).await?;
+        let mut db_customer = DbCustomer::find_by_email(&self.tenant, email).await?;
 
         db_customer.password = new_password.to_string();
         db_customer.hash_password()?;
 
-        DbCustomer::update_password(self.tenant_id, db_customer.id, &db_customer.password, &db_customer.algorithm).await?;
+        DbCustomer::update_password(&self.tenant, db_customer.id, &db_customer.password, &db_customer.algorithm).await?;
 
         Ok(true)
     }
 
     pub async fn request_password_reset(&self, email: String) -> Result<bool, ShopsterError> {
-        let _db_customer = DbCustomer::find_by_email(self.tenant_id, email).await?;
+        let _db_customer = DbCustomer::find_by_email(&self.tenant, email).await?;
         Ok(true)
     }
 
     pub async fn verify_email(&self, customer_id: Uuid) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomer::find(self.tenant_id, customer_id).await?;
+        let db_customer = DbCustomer::find(&self.tenant, customer_id).await?;
 
         let profile = DbProfileMessage {
             email: db_customer.email.clone(),
@@ -230,25 +231,25 @@ impl Customers {
             full_name: db_customer.full_name.clone(),
         };
 
-        let updated_db_customer = DbCustomer::update(self.tenant_id, customer_id, profile).await?;
+        let updated_db_customer = DbCustomer::update(&self.tenant, customer_id, profile).await?;
 
         let customer = Customer::try_from(&updated_db_customer)?;
         Ok(customer)
     }
 
     pub async fn count_customers(&self) -> Result<i64, ShopsterError> {
-        let count = DbCustomer::count(self.tenant_id).await?;
+        let count = DbCustomer::count(&self.tenant).await?;
         Ok(count)
     }
 
     pub async fn search_customers(&self, search_term: &str) -> Result<Vec<Customer>, ShopsterError> {
-        let db_customers = DbCustomer::search(self.tenant_id, search_term).await?;
+        let db_customers = DbCustomer::search(&self.tenant, search_term).await?;
         let customers = db_customers.iter().map(Customer::try_from).collect::<Result<Vec<_>, _>>()?;
         Ok(customers)
     }
 
     pub async fn get_customers_with_pagination(&self, page: i64, per_page: i64) -> Result<Vec<Customer>, ShopsterError> {
-        let db_customers = DbCustomer::get_with_pagination(self.tenant_id, page, per_page).await?;
+        let db_customers = DbCustomer::get_with_pagination(&self.tenant, page, per_page).await?;
         let customers = db_customers.iter().map(Customer::try_from).collect::<Result<Vec<_>, _>>()?;
         Ok(customers)
     }

@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::products::ProductSort;
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_pool;
+use crate::TenantDb;
 
 
 
@@ -78,8 +78,8 @@ impl From<&DbProduct> for InsertableDbProduct {
 
 impl DbProduct {
 
-    pub async fn find_by_article_number(tenant_id: Uuid, article_number: &str) -> Result<Option<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_by_article_number(tenant: &TenantDb, article_number: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let product = products::table
@@ -89,8 +89,8 @@ impl DbProduct {
         Ok(product)
     }
 
-    pub async fn find_by_gtin(tenant_id: Uuid, gtin: &str) -> Result<Option<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_by_gtin(tenant: &TenantDb, gtin: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let product = products::table
@@ -101,14 +101,14 @@ impl DbProduct {
     }
 
     pub async fn search(
-        tenant_id: Uuid,
+        tenant: &TenantDb,
         query: &Option<String>,
         tags: &[String],
         sort: ProductSort,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<Self>, i64), ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         // Build boxed queries for composable filtering.
@@ -155,8 +155,8 @@ impl DbProduct {
         Ok((items, total))
     }
 
-    pub async fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find(tenant: &TenantDb, id: i64) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let product = products::table
@@ -165,16 +165,16 @@ impl DbProduct {
         Ok(product)
     }
 
-    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_all(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let products = products::table.load(&mut conn).await?;
         Ok(products)
     }
 
-    pub async fn create(tenant_id: Uuid, product: DbProduct) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create(tenant: &TenantDb, product: DbProduct) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let insertable = InsertableDbProduct::from(&product);
@@ -184,8 +184,8 @@ impl DbProduct {
         Ok(db_product)
     }
 
-    pub async fn update(tenant_id: Uuid, id: i64, product: DbProduct) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update(tenant: &TenantDb, id: i64, product: DbProduct) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_product = diesel::update(products::table)
@@ -195,8 +195,8 @@ impl DbProduct {
         Ok(db_product)
     }
 
-    pub async fn delete(tenant_id: Uuid, id: i64) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete(tenant: &TenantDb, id: i64) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(

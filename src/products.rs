@@ -1,5 +1,6 @@
 //! Product catalog management.
 
+use crate::TenantDb;
 use crate::error::ShopsterError;
 use crate::postgresql::dbproduct::DbProduct;
 use diesel::result::{DatabaseErrorKind, Error as DieselError};
@@ -136,12 +137,12 @@ fn map_product_unique_violation(e: ShopsterError) -> ShopsterError {
 
 /// Handler for product management operations.
 pub struct Products {
-    tenant_id: Uuid
+    tenant: TenantDb
 }
 
 impl Products {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Products { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Products { tenant }
     }
 
     /// Search and filter products with pagination.
@@ -149,30 +150,30 @@ impl Products {
         let limit = if params.limit <= 0 { 50 } else { params.limit };
         let offset = if params.offset < 0 { 0 } else { params.offset };
 
-        let (db_products, total) = DbProduct::search(self.tenant_id, &params.query, &params.tags, params.sort, limit, offset).await?;
+        let (db_products, total) = DbProduct::search(&self.tenant, &params.query, &params.tags, params.sort, limit, offset).await?;
         let items = db_products.iter().map(Product::from).collect();
         Ok(PagedResult { items, total })
     }
 
     pub async fn get_all(&self) -> Result<Vec<Product>, ShopsterError> {
-        let db_products = DbProduct::get_all(self.tenant_id).await?;
+        let db_products = DbProduct::get_all(&self.tenant).await?;
         let products = db_products.iter().map(Product::from).collect();
         Ok(products)
     }
 
     pub async fn get(&self, product_id: i64) -> Result<Product, ShopsterError> {
-        let db_product = DbProduct::find(self.tenant_id, product_id).await?;
+        let db_product = DbProduct::find(&self.tenant, product_id).await?;
         let product = Product::from(&db_product);
         Ok(product)
     }
 
     pub async fn find_by_article_number(&self, article_number: &str) -> Result<Option<Product>, ShopsterError> {
-        let db_product = DbProduct::find_by_article_number(self.tenant_id, article_number).await?;
+        let db_product = DbProduct::find_by_article_number(&self.tenant, article_number).await?;
         Ok(db_product.as_ref().map(Product::from))
     }
 
     pub async fn find_by_gtin(&self, gtin: &str) -> Result<Option<Product>, ShopsterError> {
-        let db_product = DbProduct::find_by_gtin(self.tenant_id, gtin).await?;
+        let db_product = DbProduct::find_by_gtin(&self.tenant, gtin).await?;
         Ok(db_product.as_ref().map(Product::from))
     }
 
@@ -190,7 +191,7 @@ impl Products {
             }
         }
         let db_product = DbProduct::try_from(product)?;
-        let created_product = DbProduct::create(self.tenant_id, db_product).await
+        let created_product = DbProduct::create(&self.tenant, db_product).await
             .map_err(map_product_unique_violation)?;
 
         let reply = Product::from(&created_product);
@@ -211,7 +212,7 @@ impl Products {
             }
         }
         let db_product = DbProduct::try_from(product)?;
-        let updated_product = DbProduct::update(self.tenant_id, product.id, db_product).await
+        let updated_product = DbProduct::update(&self.tenant, product.id, db_product).await
             .map_err(map_product_unique_violation)?;
 
         let reply = Product::from(&updated_product);
@@ -219,7 +220,7 @@ impl Products {
     }
 
     pub async fn remove(&self, product_id: i64) -> Result<bool, ShopsterError> {
-        let result = DbProduct::delete(self.tenant_id, product_id).await?;
+        let result = DbProduct::delete(&self.tenant, product_id).await?;
         Ok(result > 0)
     }
 }

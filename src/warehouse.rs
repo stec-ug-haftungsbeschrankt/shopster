@@ -1,5 +1,6 @@
 //! Inventory and warehouse management.
 
+use crate::TenantDb;
 use chrono::{NaiveDateTime, Utc};
 use serde_derive::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -69,22 +70,22 @@ impl From<&WarehouseItem> for DbWarehouse {
 
 /// Handler for warehouse and inventory management.
 pub struct Warehouse {
-    tenant_id: Uuid,
+    tenant: TenantDb,
 }
 
 impl Warehouse {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Warehouse { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Warehouse { tenant }
     }
 
     pub async fn get_all(&self) -> Result<Vec<WarehouseItem>, ShopsterError> {
-        let db_items = DbWarehouse::get_all(self.tenant_id).await?;
+        let db_items = DbWarehouse::get_all(&self.tenant).await?;
         Ok(db_items.iter().map(WarehouseItem::from).collect())
     }
 
     pub async fn get_all_with_details(&self) -> Result<Vec<WarehouseItemDetails>, ShopsterError> {
         let items = self.get_all().await?;
-        let products = crate::products::Products::new(self.tenant_id);
+        let products = crate::products::Products::new(self.tenant.clone());
         let mut result = Vec::new();
 
         for item in items {
@@ -104,24 +105,24 @@ impl Warehouse {
     }
 
     pub async fn get_by_product_id(&self, product_id: i64) -> Result<WarehouseItem, ShopsterError> {
-        let db_item = DbWarehouse::find_by_product_id(self.tenant_id, product_id).await?;
+        let db_item = DbWarehouse::find_by_product_id(&self.tenant, product_id).await?;
         Ok(WarehouseItem::from(&db_item))
     }
 
     pub async fn insert(&self, item: &WarehouseItem) -> Result<WarehouseItem, ShopsterError> {
         let db_item = DbWarehouse::from(item);
-        let created_item = DbWarehouse::create(self.tenant_id, db_item).await?;
+        let created_item = DbWarehouse::create(&self.tenant, db_item).await?;
         Ok(WarehouseItem::from(&created_item))
     }
 
     pub async fn update_by_product_id(&self, product_id: i64, item: &WarehouseItem) -> Result<WarehouseItem, ShopsterError> {
         let db_item = DbWarehouse::from(item);
-        let updated_item = DbWarehouse::update_by_product_id(self.tenant_id, product_id, db_item).await?;
+        let updated_item = DbWarehouse::update_by_product_id(&self.tenant, product_id, db_item).await?;
         Ok(WarehouseItem::from(&updated_item))
     }
 
     pub async fn remove_by_product_id(&self, product_id: i64) -> Result<bool, ShopsterError> {
-        let result = DbWarehouse::delete_by_product_id(self.tenant_id, product_id).await?;
+        let result = DbWarehouse::delete_by_product_id(&self.tenant, product_id).await?;
         Ok(result > 0)
     }
 
@@ -129,12 +130,12 @@ impl Warehouse {
     ///
     /// The effective threshold per item is `low_stock_threshold.unwrap_or(default_threshold)`.
     pub async fn get_low_stock(&self, default_threshold: i64) -> Result<Vec<WarehouseItem>, ShopsterError> {
-        let db_items = DbWarehouse::get_low_stock(self.tenant_id, default_threshold).await?;
+        let db_items = DbWarehouse::get_low_stock(&self.tenant, default_threshold).await?;
         Ok(db_items.iter().map(WarehouseItem::from).collect())
     }
 
     pub async fn apply_reserved_delta(&self, product_id: i64, delta: i64) -> Result<WarehouseItem, ShopsterError> {
-        let db_item = DbWarehouse::apply_reserved_delta(self.tenant_id, product_id, delta).await?;
+        let db_item = DbWarehouse::apply_reserved_delta(&self.tenant, product_id, delta).await?;
         Ok(WarehouseItem::from(&db_item))
     }
 }

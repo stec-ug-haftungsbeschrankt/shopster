@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_pool;
+use crate::TenantDb;
 
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, QueryableByName, Insertable, AsChangeset)]
 #[diesel(table_name = warehouse)]
@@ -50,8 +50,8 @@ impl From<&DbWarehouse> for InsertableDbWarehouse {
 }
 
 impl DbWarehouse {
-    pub async fn find_by_product_id(tenant_id: Uuid, product_id: i64) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_by_product_id(tenant: &TenantDb, product_id: i64) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let item = warehouse::table
@@ -62,8 +62,8 @@ impl DbWarehouse {
 
     /// Returns warehouse items where `in_stock - reserved <= effective_threshold`.
     /// The effective threshold per item is `low_stock_threshold.unwrap_or(default_threshold)`.
-    pub async fn get_low_stock(tenant_id: Uuid, default_threshold: i64) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_low_stock(tenant: &TenantDb, default_threshold: i64) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         // COALESCE(low_stock_threshold, default_threshold) gives the per-item threshold.
@@ -75,16 +75,16 @@ impl DbWarehouse {
         Ok(items)
     }
 
-    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_all(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let items = warehouse::table.load(&mut conn).await?;
         Ok(items)
     }
 
-    pub async fn create(tenant_id: Uuid, item: DbWarehouse) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create(tenant: &TenantDb, item: DbWarehouse) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let insertable = InsertableDbWarehouse::from(&item);
@@ -94,8 +94,8 @@ impl DbWarehouse {
         Ok(db_item)
     }
 
-    pub async fn update_by_product_id(tenant_id: Uuid, product_id: i64, item: DbWarehouse) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update_by_product_id(tenant: &TenantDb, product_id: i64, item: DbWarehouse) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_item = diesel::update(warehouse::table)
@@ -105,8 +105,8 @@ impl DbWarehouse {
         Ok(db_item)
     }
 
-    pub async fn delete_by_product_id(tenant_id: Uuid, product_id: i64) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete_by_product_id(tenant: &TenantDb, product_id: i64) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(
@@ -117,8 +117,8 @@ impl DbWarehouse {
         Ok(res)
     }
 
-    pub async fn apply_reserved_delta(tenant_id: Uuid, product_id: i64, delta: i64) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn apply_reserved_delta(tenant: &TenantDb, product_id: i64, delta: i64) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
         Self::apply_reserved_delta_conn(&mut conn, product_id, delta).await
     }

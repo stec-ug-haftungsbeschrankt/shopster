@@ -77,7 +77,7 @@ use crate::diesel_migrations::MigrationHarness;
 use crate::postgresql::{DatabaseHelper, redact_connection_string};
 use log::info;
 use std::collections::HashMap;
-use std::sync::{Arc, OnceLock};
+use std::sync::Arc;
 use tokio::sync::{Mutex, OnceCell};
 use stec_tenet::Tenet;
 use uuid::Uuid;
@@ -223,26 +223,40 @@ impl DatabaseSelector {
     }
 }
 
-static DATABASE_SELECTOR: OnceLock<DatabaseSelector> = OnceLock::new();
-
-/// Acquires a connection pool for the given tenant from the global selector.
-pub(crate) async fn aquire_pool(tenant_id: Uuid) -> Result<DbPool, ShopsterError> {
-    DATABASE_SELECTOR.get()
-        .ok_or(ShopsterError::NotInitialized)?
-        .get_storage_for_tenant(tenant_id)
-        .await
+/// A handle to one tenant's storage: the owning [`DatabaseSelector`] plus the tenant id.
+///
+/// Every domain handler (`Baskets`, `Orders`, ...) carries one, so no process-wide state
+/// is needed and several `Shopster` instances can coexist in one process.
+#[derive(Debug, Clone)]
+pub struct TenantDb {
+    selector: Arc<DatabaseSelector>,
+    tenant_id: Uuid,
 }
 
+impl TenantDb {
+    /// Creates a handle for `tenant_id` backed by `selector`.
+    pub fn new(selector: Arc<DatabaseSelector>, tenant_id: Uuid) -> Self {
+        TenantDb { selector, tenant_id }
+    }
 
-/// Returns the configured secret-settings key.
-pub(crate) fn secret_key() -> Result<&'static SecretKey, ShopsterError> {
-    DATABASE_SELECTOR.get()
-        .ok_or(ShopsterError::NotInitialized)?
-        .secret_key
-        .as_ref()
-        .ok_or_else(|| ShopsterError::InvalidOperationError(
-            "No secret key configured: call DatabaseSelector::with_secret_key".to_string()
-        ))
+    /// The tenant this handle belongs to.
+    pub fn tenant_id(&self) -> Uuid {
+        self.tenant_id
+    }
+
+    /// Acquires (or lazily creates) the connection pool for this tenant.
+    pub(crate) async fn pool(&self) -> Result<DbPool, ShopsterError> {
+        self.selector.get_storage_for_tenant(self.tenant_id).await
+    }
+
+    /// Returns the configured secret-settings key.
+    pub(crate) fn secret_key(&self) -> Result<&SecretKey, ShopsterError> {
+        self.selector.secret_key
+            .as_ref()
+            .ok_or_else(|| ShopsterError::InvalidOperationError(
+                "No secret key configured: call DatabaseSelector::with_secret_key".to_string()
+            ))
+    }
 }
 
 /// The main entry point for accessing Shopster functionality.
@@ -257,54 +271,65 @@ pub(crate) fn secret_key() -> Result<&'static SecretKey, ShopsterError> {
 /// let customer = customers.get(customer_uuid).await?;
 /// ```
 #[derive(Debug, Clone)]
-pub struct Shopster { }
+pub struct Shopster {
+    selector: Arc<DatabaseSelector>,
+}
 
 impl Shopster {
-    /// Creates a new `Shopster` instance and initializes the global database selector.
+    /// Creates a new `Shopster` instance owning the given database selector.
+    ///
+    /// Each instance is fully independent: creating several (e.g. with different
+    /// Tenet backends) in one process is supported.
     pub fn new(database_selector: DatabaseSelector) -> Self {
-        if DATABASE_SELECTOR.set(database_selector).is_err() {
-            warn!("Shopster::new called more than once: the DatabaseSelector registered first stays in use");
-        }
-        Shopster { }
+        Shopster { selector: Arc::new(database_selector) }
+    }
+
+    /// Creates a `Shopster` sharing an already reference-counted selector.
+    pub fn from_shared(database_selector: Arc<DatabaseSelector>) -> Self {
+        Shopster { selector: database_selector }
+    }
+
+    fn tenant_db(&self, tenant_id: Uuid) -> TenantDb {
+        TenantDb::new(self.selector.clone(), tenant_id)
     }
 
     /// Gets a `Baskets` handler for managing shopping carts.
     pub fn baskets(&self, tenant_id: Uuid) -> Result<Baskets, ShopsterError> {
-        Ok(Baskets::new(tenant_id))
+        Ok(Baskets::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets a `Coupons` handler for discount coupon management.
     pub fn coupons(&self, tenant_id: Uuid) -> Result<Coupons, ShopsterError> {
-        Ok(Coupons::new(tenant_id))
+        Ok(Coupons::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets a `Customers` handler for customer management.
     pub fn customers(&self, tenant_id: Uuid) -> Result<Customers, ShopsterError> {
-        Ok(Customers::new(tenant_id))
+        Ok(Customers::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets a `Products` handler for product catalog management.
     pub fn products(&self, tenant_id: Uuid) -> Result<Products, ShopsterError> {
-        Ok(Products::new(tenant_id))
+        Ok(Products::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets an `Orders` handler for order management and processing.
     pub fn orders(&self, tenant_id: Uuid) -> Result<Orders, ShopsterError> {
-        Ok(Orders::new(tenant_id))
+        Ok(Orders::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets a `Settings` handler for shop configuration.
     pub fn settings(&self, tenant_id: Uuid) -> Result<Settings, ShopsterError> {
-        Ok(Settings::new(tenant_id))
+        Ok(Settings::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets a `Warehouse` handler for inventory management.
     pub fn warehouse(&self, tenant_id: Uuid) -> Result<Warehouse, ShopsterError> {
-        Ok(Warehouse::new(tenant_id))
+        Ok(Warehouse::new(self.tenant_db(tenant_id)))
     }
 
     /// Gets a `PaymentAttempts` handler for recording and querying failed payment attempts.
     pub fn payment_attempts(&self, tenant_id: Uuid) -> Result<PaymentAttempts, ShopsterError> {
-        Ok(PaymentAttempts::new(tenant_id))
+        Ok(PaymentAttempts::new(self.tenant_db(tenant_id)))
     }
 }

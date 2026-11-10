@@ -1,5 +1,6 @@
 //! Failed payment attempt tracking.
 
+use crate::TenantDb;
 use chrono::{NaiveDateTime, Utc};
 use uuid::Uuid;
 
@@ -37,23 +38,23 @@ impl From<DbPaymentAttempt> for PaymentAttempt {
 
 /// Handler for payment attempt operations.
 pub struct PaymentAttempts {
-    tenant_id: Uuid,
+    tenant: TenantDb,
 }
 
 impl PaymentAttempts {
-    pub fn new(tenant_id: Uuid) -> Self {
-        PaymentAttempts { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        PaymentAttempts { tenant }
     }
 
     /// Returns all recorded payment attempts, most recent first.
     pub async fn get_all(&self) -> Result<Vec<PaymentAttempt>, ShopsterError> {
-        let attempts = DbPaymentAttempt::get_all(self.tenant_id).await?;
+        let attempts = DbPaymentAttempt::get_all(&self.tenant).await?;
         Ok(attempts.into_iter().map(PaymentAttempt::from).collect())
     }
 
     /// Looks up a payment attempt by its Stripe payment intent id.
     pub async fn find_by_payment_intent_id(&self, payment_intent_id: &str) -> Result<Option<PaymentAttempt>, ShopsterError> {
-        let attempt = DbPaymentAttempt::find_by_payment_intent_id(self.tenant_id, payment_intent_id).await?;
+        let attempt = DbPaymentAttempt::find_by_payment_intent_id(&self.tenant, payment_intent_id).await?;
         Ok(attempt.map(PaymentAttempt::from))
     }
 
@@ -69,7 +70,7 @@ impl PaymentAttempts {
             created_at: Utc::now().naive_utc(),
         };
 
-        match DbPaymentAttempt::create(self.tenant_id, insertable).await {
+        match DbPaymentAttempt::create(&self.tenant, insertable).await {
             Ok(attempt) => Ok(Some(PaymentAttempt::from(attempt))),
             Err(ShopsterError::DatabaseError(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, _))) => Ok(None),
             Err(e) => Err(e),

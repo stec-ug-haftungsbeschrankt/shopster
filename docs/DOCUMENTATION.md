@@ -198,7 +198,7 @@ The `error.rs` module documents all possible errors:
 - `InvalidOperationError` - Invalid state or parameters
 - `AuthenticationError` - Authentication failure
 - `DatabaseMigrationError` - A tenant database migration failed (tenant initialisation is retried on next access)
-- `NotInitialized` - A handler was used before `Shopster::new` registered a `DatabaseSelector`
+- `NotInitialized` - Reserved; no longer returned since the global selector was removed (0.7.0)
 
 ## Architecture Diagrams
 
@@ -219,7 +219,7 @@ External Services (PostgreSQL, Tenet, r2d2)
 ```
 Shopster Instance
     ↓
-DatabaseSelector (Singleton)
+DatabaseSelector (owned by Shopster, shared via Arc)
     ├─ Tenant 1 → Connection Pool 1
     ├─ Tenant 2 → Connection Pool 2
     └─ Tenant 3 → Connection Pool 3

@@ -7,7 +7,7 @@ use uuid::Uuid;
 
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_pool;
+use crate::TenantDb;
 
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
 #[diesel(table_name = payment_attempts)]
@@ -33,8 +33,8 @@ pub struct InsertableDbPaymentAttempt {
 }
 
 impl DbPaymentAttempt {
-    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_all(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let attempts = payment_attempts::table
@@ -43,8 +43,8 @@ impl DbPaymentAttempt {
         Ok(attempts)
     }
 
-    pub async fn find_by_payment_intent_id(tenant_id: Uuid, payment_intent_id: &str) -> Result<Option<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_by_payment_intent_id(tenant: &TenantDb, payment_intent_id: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let attempt = payment_attempts::table
@@ -54,8 +54,8 @@ impl DbPaymentAttempt {
         Ok(attempt)
     }
 
-    pub async fn create(tenant_id: Uuid, attempt: InsertableDbPaymentAttempt) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create(tenant: &TenantDb, attempt: InsertableDbPaymentAttempt) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_attempt = diesel::insert_into(payment_attempts::table)

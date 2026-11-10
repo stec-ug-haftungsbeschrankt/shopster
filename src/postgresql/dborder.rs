@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_pool;
+use crate::TenantDb;
 
 #[derive(Debug, AsExpression, FromSqlRow, Serialize, Deserialize, PartialEq, PartialOrd, Copy, Clone)]
 #[diesel(sql_type = crate::schema::sql_types::DbOrderStatus)]
@@ -280,8 +280,8 @@ impl From<&DbOrderItem> for InsertableDbOrderItem {
 }
 
 impl DbOrderItem {
-    pub async fn get_for_order(tenant_id: Uuid, order_id: i64) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_for_order(tenant: &TenantDb, order_id: i64) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
         Self::get_for_order_conn(&mut conn, order_id).await
     }
@@ -293,12 +293,12 @@ impl DbOrderItem {
         Ok(items)
     }
 
-    pub async fn create_for_order(tenant_id: Uuid, items: Vec<DbOrderItem>) -> Result<Vec<Self>, ShopsterError> {
+    pub async fn create_for_order(tenant: &TenantDb, items: Vec<DbOrderItem>) -> Result<Vec<Self>, ShopsterError> {
         if items.is_empty() {
             return Ok(Vec::new());
         }
 
-        let pool = aquire_pool(tenant_id).await?;
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
         let insertables: Vec<InsertableDbOrderItem> = items.iter().map(InsertableDbOrderItem::from).collect();
         let db_items = diesel::insert_into(order_items::table)
@@ -325,14 +325,14 @@ impl DbOrderItem {
 impl DbOrder {
 
     pub async fn list(
-        tenant_id: Uuid,
+        tenant: &TenantDb,
         status: Option<DbOrderStatus>,
         payment_status: Option<DbPaymentStatus>,
         customer_id: Option<Uuid>,
         limit: i64,
         offset: i64,
     ) -> Result<(Vec<Self>, i64), ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         // We build the filtered query using Diesel's boxed queries for composability.
@@ -370,8 +370,8 @@ impl DbOrder {
         Ok((items, total))
     }
 
-    pub async fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find(tenant: &TenantDb, id: i64) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let order = orders::table
@@ -380,16 +380,16 @@ impl DbOrder {
         Ok(order)
     }
 
-    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_all(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let orders = orders::table.load(&mut conn).await?;
         Ok(orders)
     }
 
-    pub async fn get_by_customer_id(tenant_id: Uuid, customer_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_by_customer_id(tenant: &TenantDb, customer_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let orders = orders::table
@@ -398,8 +398,8 @@ impl DbOrder {
         Ok(orders)
     }
 
-    pub async fn find_by_payment_reference(tenant_id: Uuid, payment_reference: &str) -> Result<Option<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_by_payment_reference(tenant: &TenantDb, payment_reference: &str) -> Result<Option<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let order = orders::table
@@ -409,8 +409,8 @@ impl DbOrder {
         Ok(order)
     }
 
-    pub async fn get_without_customer_id(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_without_customer_id(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let orders = orders::table
@@ -419,8 +419,8 @@ impl DbOrder {
         Ok(orders)
     }
 
-    pub async fn create(tenant_id: Uuid, order: DbOrder) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create(tenant: &TenantDb, order: DbOrder) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let insertable = InsertableDbOrder::from(&order);
@@ -438,8 +438,8 @@ impl DbOrder {
         Ok(db_order)
     }
 
-    pub async fn update(tenant_id: Uuid, id: i64, order: DbOrder) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update(tenant: &TenantDb, id: i64, order: DbOrder) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_order = diesel::update(orders::table)
@@ -457,8 +457,8 @@ impl DbOrder {
         Ok(db_order)
     }
 
-    pub async fn update_payment_status(tenant_id: Uuid, id: i64, payment_status: DbPaymentStatus) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update_payment_status(tenant: &TenantDb, id: i64, payment_status: DbPaymentStatus) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_order = diesel::update(orders::table)
@@ -468,8 +468,8 @@ impl DbOrder {
         Ok(db_order)
     }
 
-    pub async fn delete(tenant_id: Uuid, id: i64) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete(tenant: &TenantDb, id: i64) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(

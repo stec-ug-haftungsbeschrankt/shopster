@@ -1,5 +1,6 @@
 //! Discount coupon management.
 
+use crate::TenantDb;
 use chrono::NaiveDateTime;
 use uuid::Uuid;
 
@@ -42,21 +43,21 @@ impl From<DbCoupon> for Coupon {
 
 /// Handler for coupon management operations.
 pub struct Coupons {
-    tenant_id: Uuid,
+    tenant: TenantDb,
 }
 
 impl Coupons {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Coupons { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Coupons { tenant }
     }
 
     pub async fn get_all(&self) -> Result<Vec<Coupon>, ShopsterError> {
-        let db_coupons = DbCoupon::get_all(self.tenant_id).await?;
+        let db_coupons = DbCoupon::get_all(&self.tenant).await?;
         Ok(db_coupons.into_iter().map(Coupon::from).collect())
     }
 
     pub async fn find_by_code(&self, code: &str) -> Result<Option<Coupon>, ShopsterError> {
-        let coupon = DbCoupon::find_by_code(self.tenant_id, code).await?;
+        let coupon = DbCoupon::find_by_code(&self.tenant, code).await?;
         Ok(coupon.map(Coupon::from))
     }
 
@@ -81,13 +82,13 @@ impl Coupons {
             use_count: 0,
             created_at: chrono::Utc::now().naive_utc(),
         };
-        let db_coupon = DbCoupon::create(self.tenant_id, insertable).await?;
+        let db_coupon = DbCoupon::create(&self.tenant, insertable).await?;
         Ok(Coupon::from(db_coupon))
     }
 
     /// Validates a coupon code and returns it if currently usable.
     pub async fn validate(&self, code: &str) -> Result<Option<Coupon>, ShopsterError> {
-        let Some(coupon) = DbCoupon::find_by_code(self.tenant_id, code).await? else {
+        let Some(coupon) = DbCoupon::find_by_code(&self.tenant, code).await? else {
             return Ok(None);
         };
         let now = chrono::Utc::now().naive_utc();
@@ -110,12 +111,12 @@ impl Coupons {
     }
 
     pub async fn increment_use_count(&self, coupon_id: i64) -> Result<Coupon, ShopsterError> {
-        let db_coupon = DbCoupon::increment_use_count(self.tenant_id, coupon_id).await?;
+        let db_coupon = DbCoupon::increment_use_count(&self.tenant, coupon_id).await?;
         Ok(Coupon::from(db_coupon))
     }
 
     pub async fn delete(&self, coupon_id: i64) -> Result<bool, ShopsterError> {
-        let count = DbCoupon::delete(self.tenant_id, coupon_id).await?;
+        let count = DbCoupon::delete(&self.tenant, coupon_id).await?;
         Ok(count > 0)
     }
 }

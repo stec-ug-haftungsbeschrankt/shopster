@@ -4,7 +4,7 @@ use uuid::Uuid;
 use chrono::{Duration, NaiveDateTime, Utc};
 use diesel_async::AsyncConnection;
 
-use crate::aquire_pool;
+use crate::TenantDb;
 use crate::{postgresql::dbbasket::DbBasket, error::ShopsterError};
 use crate::postgresql::dbbasket::DbBasketProduct;
 
@@ -64,16 +64,16 @@ pub struct BasketProductWithDetails {
 
 /// Handler for shopping basket operations.
 pub struct Baskets {
-    tenant_id: Uuid
+    tenant: TenantDb
 }
 
 impl Baskets {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Baskets { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Baskets { tenant }
     }
 
     pub async fn get_all_baskets(&self) -> Result<Vec<Basket>, ShopsterError> {
-        let db_baskets = DbBasket::get_all(self.tenant_id).await?;
+        let db_baskets = DbBasket::get_all(&self.tenant).await?;
         let mut baskets = Vec::new();
 
         for db_basket in db_baskets {
@@ -86,20 +86,20 @@ impl Baskets {
     }
 
     pub async fn get_basket(&self, basket_id: Uuid) -> Result<Basket, ShopsterError> {
-        let db_basket = DbBasket::find(self.tenant_id, basket_id).await?;
+        let db_basket = DbBasket::find(&self.tenant, basket_id).await?;
         let mut basket = Basket::from(&db_basket);
         basket.products = self.get_products_from_basket(basket.id).await?;
         Ok(basket)
     }
 
     pub async fn add_basket(&self) -> Result<Uuid, ShopsterError> {
-        let db_basket = DbBasket::create(self.tenant_id).await?;
+        let db_basket = DbBasket::create(&self.tenant).await?;
         Ok(db_basket.id)
     }
 
     pub async fn delete_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
         self.clear_basket(basket_id).await?;
-        let deleted_baskets = DbBasket::delete(self.tenant_id, basket_id).await?;
+        let deleted_baskets = DbBasket::delete(&self.tenant, basket_id).await?;
         Ok(deleted_baskets > 0)
     }
 
@@ -109,19 +109,19 @@ impl Baskets {
                 "Quantity must be positive".to_string(),
             ));
         }
-        let items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id).await?;
+        let items = DbBasketProduct::get_basket_items(&self.tenant, basket_id).await?;
 
         let id = if let Some(mut item) = items.into_iter().find(|x| x.product_id == product_id) {
             item.quantity = quantity;
-            let updated_item = DbBasketProduct::update_basket_item(self.tenant_id, item.id, item).await?;
+            let updated_item = DbBasketProduct::update_basket_item(&self.tenant, item.id, item).await?;
             updated_item.id
         } else {
             let basket_product = DbBasketProduct { id: 0, product_id, quantity, basket_id };
-            let new_item = DbBasketProduct::create_basket_item(self.tenant_id, basket_product).await?;
+            let new_item = DbBasketProduct::create_basket_item(&self.tenant, basket_product).await?;
             new_item.id
         };
 
-        DbBasket::touch(self.tenant_id, basket_id).await?;
+        DbBasket::touch(&self.tenant, basket_id).await?;
         Ok(id)
     }
 
@@ -131,7 +131,7 @@ impl Baskets {
                 "Quantity must be positive".to_string(),
             ));
         }
-        let basket_product = DbBasketProduct::find_basket_item(self.tenant_id, basket_product_id).await?;
+        let basket_product = DbBasketProduct::find_basket_item(&self.tenant, basket_product_id).await?;
 
         if basket_product.basket_id != basket_id {
             return Err(ShopsterError::InvalidOperationError("Produkt gehört nicht zu diesem Warenkorb".to_string()));
@@ -140,34 +140,34 @@ impl Baskets {
         let mut updated_product = basket_product;
         updated_product.quantity = quantity;
 
-        let result = DbBasketProduct::update_basket_item(self.tenant_id, basket_product_id, updated_product).await?;
-        DbBasket::touch(self.tenant_id, basket_id).await?;
+        let result = DbBasketProduct::update_basket_item(&self.tenant, basket_product_id, updated_product).await?;
+        DbBasket::touch(&self.tenant, basket_id).await?;
         Ok(BasketProduct::from(&result))
     }
 
     pub async fn remove_product_from_basket(&self, basket_id: Uuid, basket_product_id: i64) -> Result<bool, ShopsterError> {
-        let basket_product = DbBasketProduct::find_basket_item(self.tenant_id, basket_product_id).await?;
+        let basket_product = DbBasketProduct::find_basket_item(&self.tenant, basket_product_id).await?;
 
         if basket_product.basket_id != basket_id {
             return Err(ShopsterError::InvalidOperationError("Produkt gehört nicht zu diesem Warenkorb".to_string()));
         }
 
-        let result = DbBasketProduct::delete_basket_item(self.tenant_id, basket_product_id).await?;
-        DbBasket::touch(self.tenant_id, basket_id).await?;
+        let result = DbBasketProduct::delete_basket_item(&self.tenant, basket_product_id).await?;
+        DbBasket::touch(&self.tenant, basket_id).await?;
         Ok(result > 0)
     }
 
     pub async fn get_products_from_basket(&self, basket_id: Uuid) -> Result<Vec<BasketProduct>, ShopsterError> {
-        let db_items = DbBasketProduct::get_basket_items(self.tenant_id, basket_id).await?;
+        let db_items = DbBasketProduct::get_basket_items(&self.tenant, basket_id).await?;
         let items = db_items.iter().map(BasketProduct::from).collect();
         Ok(items)
     }
 
     pub async fn get_products_with_details(&self, basket_id: Uuid) -> Result<Vec<BasketProductWithDetails>, ShopsterError> {
-        let basket_products = DbBasketProduct::get_basket_items(self.tenant_id, basket_id).await?;
+        let basket_products = DbBasketProduct::get_basket_items(&self.tenant, basket_id).await?;
         let mut result = Vec::new();
 
-        let products = crate::products::Products::new(self.tenant_id);
+        let products = crate::products::Products::new(self.tenant.clone());
 
         for basket_product in basket_products {
             let product = products.get(basket_product.product_id).await?;
@@ -183,8 +183,8 @@ impl Baskets {
     }
 
     pub async fn clear_basket(&self, basket_id: Uuid) -> Result<bool, ShopsterError> {
-        DbBasket::find(self.tenant_id, basket_id).await?;
-        let result = DbBasketProduct::delete_all_basket_items(self.tenant_id, basket_id).await?;
+        DbBasket::find(&self.tenant, basket_id).await?;
+        let result = DbBasketProduct::delete_all_basket_items(&self.tenant, basket_id).await?;
         Ok(result > 0)
     }
 
@@ -233,11 +233,11 @@ impl Baskets {
     /// Returns the number of baskets deleted.
     pub async fn delete_older_than(&self, max_age: Duration) -> Result<usize, ShopsterError> {
         let cutoff = Utc::now().naive_utc() - max_age;
-        DbBasket::delete_older_than(self.tenant_id, cutoff).await
+        DbBasket::delete_older_than(&self.tenant, cutoff).await
     }
 
     pub async fn merge_baskets(&self, source_basket_id: Uuid, target_basket_id: Uuid) -> Result<(), ShopsterError> {
-        let pool = aquire_pool(self.tenant_id).await?;
+        let pool = self.tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         conn.transaction(async |conn| {
