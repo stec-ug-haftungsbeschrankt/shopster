@@ -5,6 +5,7 @@
 //! and their `value` is always empty in a [`Setting`]. Use [`Settings::get_secret`] and
 //! [`Settings::set_secret`] to read and write them.
 
+use crate::TenantDb;
 use uuid::Uuid;
 
 use crate::postgresql::dbsettings::DbSetting;
@@ -50,28 +51,28 @@ impl From<&DbSetting> for Setting {
 
 /// Handler for shop settings and configuration.
 pub struct Settings {
-    tenant_id: Uuid
+    tenant: TenantDb
 }
 
 
 impl Settings {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Settings { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Settings { tenant }
     }
 
     /// Returns all non-secret settings. Secret settings are never listed.
     pub async fn get_all(&self) -> Result<Vec<Setting>, ShopsterError> {
-        let db_settings = DbSetting::get_all(self.tenant_id).await?;
+        let db_settings = DbSetting::get_all(&self.tenant).await?;
         Ok(db_settings.iter().filter(|s| !s.is_secret).map(Setting::from).collect())
     }
 
     pub async fn get_by_title(&self, title: String) -> Result<Setting, ShopsterError> {
-        let setting = DbSetting::find_by_title(self.tenant_id, title).await?;
+        let setting = DbSetting::find_by_title(&self.tenant, title).await?;
         Ok(Setting::from(&setting))
     }
 
     pub async fn get_by_id(&self, id: i32) -> Result<Setting, ShopsterError> {
-        let setting = DbSetting::find(self.tenant_id, id).await?;
+        let setting = DbSetting::find(&self.tenant, id).await?;
         Ok(Setting::from(&setting))
     }
 
@@ -83,31 +84,31 @@ impl Settings {
             value,
             is_secret: false
         };
-        let created_setting = DbSetting::create(self.tenant_id, setting).await?;
+        let created_setting = DbSetting::create(&self.tenant, setting).await?;
         Ok(Setting::from(&created_setting))
     }
 
     pub async fn update_by_id(&self, id: i32, value: String) -> Result<Setting, ShopsterError> {
-        let mut db_setting = DbSetting::find(self.tenant_id, id).await?;
+        let mut db_setting = DbSetting::find(&self.tenant, id).await?;
         if db_setting.is_secret {
             return Err(ShopsterError::InvalidOperationError(
                 format!("Setting '{}' is secret: use Settings::set_secret", db_setting.title)
             ));
         }
         db_setting.value = value;
-        let updated_setting = DbSetting::update(self.tenant_id, id, db_setting).await?;
+        let updated_setting = DbSetting::update(&self.tenant, id, db_setting).await?;
 
         let reply = Setting::from(&updated_setting);
         Ok(reply)
     }
 
     pub async fn delete_by_id(&self, id: i32) -> Result<bool, ShopsterError> {
-        let result = DbSetting::delete(self.tenant_id, id).await?;
+        let result = DbSetting::delete(&self.tenant, id).await?;
         Ok(result > 0)
     }
 
     pub async fn delete_by_title(&self, title: String) -> Result<bool, ShopsterError> {
-        let result = DbSetting::delete_by_title(self.tenant_id, &title).await?;
+        let result = DbSetting::delete_by_title(&self.tenant, &title).await?;
         Ok(result > 0)
     }
 
@@ -116,8 +117,8 @@ impl Settings {
     /// Returns an empty string for a secret that has not been set yet. Fails if the setting
     /// is not flagged as secret, or if no key is configured / the key is wrong.
     pub async fn get_secret(&self, title: &str) -> Result<String, ShopsterError> {
-        let key = crate::secret_key()?;
-        let db_setting = DbSetting::find_by_title(self.tenant_id, title.to_string()).await?;
+        let key = self.tenant.secret_key()?;
+        let db_setting = DbSetting::find_by_title(&self.tenant, title.to_string()).await?;
         if !db_setting.is_secret {
             return Err(ShopsterError::InvalidOperationError(format!("Setting '{}' is not a secret", title)));
         }
@@ -135,17 +136,17 @@ impl Settings {
     /// Encrypts and stores a secret setting, creating it (flagged secret, datatype `String`)
     /// if it does not exist yet. An existing non-secret setting of that title is rejected.
     pub async fn set_secret(&self, title: &str, value: &str) -> Result<(), ShopsterError> {
-        let key = crate::secret_key()?;
+        let key = self.tenant.secret_key()?;
         let encrypted = secrets::encrypt(key, title, value)?;
 
-        match DbSetting::find_by_title(self.tenant_id, title.to_string()).await {
+        match DbSetting::find_by_title(&self.tenant, title.to_string()).await {
             Ok(mut existing) => {
                 if !existing.is_secret {
                     return Err(ShopsterError::InvalidOperationError(format!("Setting '{}' is not a secret", title)));
                 }
                 existing.value = encrypted;
                 let id = existing.id;
-                DbSetting::update(self.tenant_id, id, existing).await?;
+                DbSetting::update(&self.tenant, id, existing).await?;
             }
             Err(ShopsterError::DatabaseError(diesel::result::Error::NotFound)) => {
                 let setting = DbSetting {
@@ -155,7 +156,7 @@ impl Settings {
                     value: encrypted,
                     is_secret: true
                 };
-                DbSetting::create(self.tenant_id, setting).await?;
+                DbSetting::create(&self.tenant, setting).await?;
             }
             Err(e) => return Err(e),
         }
@@ -165,13 +166,13 @@ impl Settings {
     /// Encrypts secret settings that are still stored in plaintext (rows created before
     /// encryption existed). Returns the number of rows converted. Idempotent.
     pub async fn encrypt_legacy_secrets(&self) -> Result<usize, ShopsterError> {
-        let key = crate::secret_key()?;
+        let key = self.tenant.secret_key()?;
         let mut converted = 0;
-        for mut db_setting in DbSetting::get_all(self.tenant_id).await? {
+        for mut db_setting in DbSetting::get_all(&self.tenant).await? {
             if db_setting.is_secret && !db_setting.value.is_empty() && !secrets::is_encrypted(&db_setting.value) {
                 db_setting.value = secrets::encrypt(key, &db_setting.title, &db_setting.value)?;
                 let id = db_setting.id;
-                DbSetting::update(self.tenant_id, id, db_setting).await?;
+                DbSetting::update(&self.tenant, id, db_setting).await?;
                 converted += 1;
             }
         }

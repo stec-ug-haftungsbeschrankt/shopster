@@ -10,7 +10,7 @@ use diesel_async::{RunQueryDsl, AsyncPgConnection};
 use uuid::Uuid;
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_pool;
+use crate::TenantDb;
 
 
 #[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
@@ -41,8 +41,8 @@ impl From<&DbBasketProduct> for InsertableDbBasketProduct {
 }
 
 impl DbBasketProduct {
-    pub async fn find_basket_item(tenant_id: Uuid, basket_product_id: i64) -> Result<DbBasketProduct, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_basket_item(tenant: &TenantDb, basket_product_id: i64) -> Result<DbBasketProduct, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let basket_product = basketproducts::table
@@ -51,8 +51,8 @@ impl DbBasketProduct {
         Ok(basket_product)
     }
 
-    pub async fn get_basket_items(tenant_id: Uuid, basket_id: Uuid) -> Result<Vec<DbBasketProduct>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_basket_items(tenant: &TenantDb, basket_id: Uuid) -> Result<Vec<DbBasketProduct>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let basket_products = basketproducts::table
@@ -61,8 +61,8 @@ impl DbBasketProduct {
         Ok(basket_products)
     }
 
-    pub async fn create_basket_item(tenant_id: Uuid, basket_product: DbBasketProduct) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create_basket_item(tenant: &TenantDb, basket_product: DbBasketProduct) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let insertable = InsertableDbBasketProduct::from(&basket_product);
@@ -72,8 +72,8 @@ impl DbBasketProduct {
         Ok(db_basket_product)
     }
 
-    pub async fn update_basket_item(tenant_id: Uuid, id: i64, basket_product: DbBasketProduct) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update_basket_item(tenant: &TenantDb, id: i64, basket_product: DbBasketProduct) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_basket_product = diesel::update(basketproducts::table)
@@ -83,8 +83,8 @@ impl DbBasketProduct {
         Ok(db_basket_product)
     }
 
-    pub async fn delete_basket_item(tenant_id: Uuid, basket_product_id: i64) -> Result<usize, ShopsterError>{
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete_basket_item(tenant: &TenantDb, basket_product_id: i64) -> Result<usize, ShopsterError>{
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(
@@ -94,8 +94,8 @@ impl DbBasketProduct {
         Ok(res)
     }
 
-    pub async fn delete_all_basket_items(tenant_id: Uuid, basket_id: Uuid) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete_all_basket_items(tenant: &TenantDb, basket_id: Uuid) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let result = diesel::delete(
@@ -167,8 +167,8 @@ impl From<&DbBasket> for InsertableDbBasket {
 
 
 impl DbBasket {
-    pub async fn touch(tenant_id: Uuid, basket_id: Uuid) -> Result<(), ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn touch(tenant: &TenantDb, basket_id: Uuid) -> Result<(), ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
         Self::touch_conn(&mut conn, basket_id).await
     }
@@ -182,8 +182,8 @@ impl DbBasket {
 
     /// Deletes all baskets (and their products) where the last-activity timestamp is before
     /// `cutoff`. Last activity is `COALESCE(updated_at, created_at)`.
-    pub async fn delete_older_than(tenant_id: Uuid, cutoff: NaiveDateTime) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete_older_than(tenant: &TenantDb, cutoff: NaiveDateTime) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         use diesel_async::AsyncConnection;
@@ -211,8 +211,8 @@ impl DbBasket {
         }).await
     }
 
-    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_all(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let baskets = baskets::table
@@ -220,8 +220,8 @@ impl DbBasket {
         Ok(baskets)
     }
 
-    pub async fn find(tenant_id: Uuid, basket_id: Uuid) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find(tenant: &TenantDb, basket_id: Uuid) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let basket = baskets::table
@@ -230,8 +230,8 @@ impl DbBasket {
         Ok(basket)
     }
 
-    pub async fn create(tenant_id: Uuid) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create(tenant: &TenantDb) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let insertable = InsertableDbBasket {
@@ -244,8 +244,8 @@ impl DbBasket {
         Ok(basket)
     }
 
-    pub async fn delete(tenant_id: Uuid, basket_id: Uuid) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete(tenant: &TenantDb, basket_id: Uuid) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(

@@ -6,7 +6,7 @@ use chrono::{NaiveDateTime, Utc};
 
 use diesel_async::AsyncConnection;
 
-use crate::aquire_pool;
+use crate::TenantDb;
 use crate::error::ShopsterError;
 use crate::baskets::Baskets;
 use crate::postgresql::dborder::DbOrder;
@@ -231,12 +231,12 @@ impl From<&Order> for DbOrder {
 
 /// Handler for order management operations.
 pub struct Orders {
-    tenant_id: Uuid
+    tenant: TenantDb
 }
 
 impl Orders {
-    pub fn new(tenant_id: Uuid) -> Self {
-        Orders { tenant_id }
+    pub fn new(tenant: TenantDb) -> Self {
+        Orders { tenant }
     }
 
     fn is_reserving_status(status: OrderStatus) -> bool {
@@ -263,7 +263,7 @@ impl Orders {
         let offset = if offset < 0 { 0 } else { offset };
 
         let (db_orders, total) = DbOrder::list(
-            self.tenant_id,
+            &self.tenant,
             filter.status.map(DbOrderStatus::from),
             filter.payment_status.map(DbPaymentStatus::from),
             filter.customer_id,
@@ -273,7 +273,7 @@ impl Orders {
 
         let mut orders = Vec::new();
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+            let db_items = DbOrderItem::get_for_order(&self.tenant, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
             orders.push(Order {
                 id: db_order.id,
@@ -298,11 +298,11 @@ impl Orders {
     }
 
     pub async fn get_all(&self) -> Result<Vec<Order>, ShopsterError> {
-        let db_orders = DbOrder::get_all(self.tenant_id).await?;
+        let db_orders = DbOrder::get_all(&self.tenant).await?;
         let mut orders = Vec::new();
 
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+            let db_items = DbOrderItem::get_for_order(&self.tenant, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
             orders.push(Order {
@@ -328,8 +328,8 @@ impl Orders {
     }
 
     pub async fn get_by_id(&self, order_id: i64) -> Result<Order, ShopsterError> {
-        let db_order = DbOrder::find(self.tenant_id, order_id).await?;
-        let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+        let db_order = DbOrder::find(&self.tenant, order_id).await?;
+        let db_items = DbOrderItem::get_for_order(&self.tenant, db_order.id).await?;
         let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
         Ok(Order {
@@ -352,11 +352,11 @@ impl Orders {
     }
 
     pub async fn get_by_customer_id(&self, customer_id: Uuid) -> Result<Vec<Order>, ShopsterError> {
-        let db_orders = DbOrder::get_by_customer_id(self.tenant_id, customer_id).await?;
+        let db_orders = DbOrder::get_by_customer_id(&self.tenant, customer_id).await?;
         let mut orders = Vec::new();
 
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+            let db_items = DbOrderItem::get_for_order(&self.tenant, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
             orders.push(Order {
@@ -382,11 +382,11 @@ impl Orders {
     }
 
     pub async fn get_without_customer_id(&self) -> Result<Vec<Order>, ShopsterError> {
-        let db_orders = DbOrder::get_without_customer_id(self.tenant_id).await?;
+        let db_orders = DbOrder::get_without_customer_id(&self.tenant).await?;
         let mut orders = Vec::new();
 
         for db_order in db_orders {
-            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+            let db_items = DbOrderItem::get_for_order(&self.tenant, db_order.id).await?;
             let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
             orders.push(Order {
@@ -412,10 +412,10 @@ impl Orders {
     }
 
     pub async fn get_by_payment_reference(&self, payment_reference: &str) -> Result<Option<Order>, ShopsterError> {
-        let Some(db_order) = DbOrder::find_by_payment_reference(self.tenant_id, payment_reference).await? else {
+        let Some(db_order) = DbOrder::find_by_payment_reference(&self.tenant, payment_reference).await? else {
             return Ok(None);
         };
-        let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+        let db_items = DbOrderItem::get_for_order(&self.tenant, db_order.id).await?;
         let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
         Ok(Some(Order {
@@ -457,7 +457,7 @@ impl Orders {
             ));
         }
 
-        let pool = aquire_pool(self.tenant_id).await?;
+        let pool = self.tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_order = DbOrder::from(order);
@@ -500,8 +500,8 @@ impl Orders {
     }
 
     pub async fn update(&self, order: &Order) -> Result<Order, ShopsterError> {
-        let existing_order = DbOrder::find(self.tenant_id, order.id).await?;
-        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order.id).await?;
+        let existing_order = DbOrder::find(&self.tenant, order.id).await?;
+        let existing_items = DbOrderItem::get_for_order(&self.tenant, order.id).await?;
         let previous_status: OrderStatus = existing_order.status.into();
         let next_status: OrderStatus = order.status;
 
@@ -512,7 +512,7 @@ impl Orders {
             )));
         }
 
-        let pool = aquire_pool(self.tenant_id).await?;
+        let pool = self.tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let db_order = DbOrder::from(order);
@@ -555,19 +555,19 @@ impl Orders {
     }
 
     pub async fn remove(&self, order_id: i64) -> Result<bool, ShopsterError> {
-        let existing_order = DbOrder::find(self.tenant_id, order_id).await?;
-        let existing_items = DbOrderItem::get_for_order(self.tenant_id, order_id).await?;
+        let existing_order = DbOrder::find(&self.tenant, order_id).await?;
+        let existing_items = DbOrderItem::get_for_order(&self.tenant, order_id).await?;
         let existing_status: OrderStatus = existing_order.status.into();
 
         if Self::is_reserving_status(existing_status) {
-            let pool = aquire_pool(self.tenant_id).await?;
+            let pool = self.tenant.pool().await?;
             let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
             for item in &existing_items {
                 DbWarehouse::apply_reserved_delta_conn(&mut conn, item.product_id, -(item.quantity)).await?;
             }
         }
 
-        let result = DbOrder::delete(self.tenant_id, order_id).await?;
+        let result = DbOrder::delete(&self.tenant, order_id).await?;
         Ok(result > 0)
     }
 
@@ -583,7 +583,7 @@ impl Orders {
     /// `None`, pass `contact_email` and `contact_name` so later notifications and admin
     /// views have a name and email to work with.
     pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String, payment_reference: Option<String>, payment_status: PaymentStatus, contact_email: Option<String>, contact_name: Option<String>) -> Result<Order, ShopsterError> {
-        let baskets = Baskets::new(self.tenant_id);
+        let baskets = Baskets::new(self.tenant.clone());
         let basket_items = baskets.get_products_with_details(basket_id).await?;
 
         let mut items = Vec::new();
@@ -640,8 +640,8 @@ impl Orders {
     /// (e.g. a Stripe webhook confirming or refunding a payment) are orthogonal to
     /// the order's shipping lifecycle.
     pub async fn update_payment_status(&self, order_id: i64, payment_status: PaymentStatus) -> Result<Order, ShopsterError> {
-        let updated_order = DbOrder::update_payment_status(self.tenant_id, order_id, payment_status.into()).await?;
-        let db_items = DbOrderItem::get_for_order(self.tenant_id, updated_order.id).await?;
+        let updated_order = DbOrder::update_payment_status(&self.tenant, order_id, payment_status.into()).await?;
+        let db_items = DbOrderItem::get_for_order(&self.tenant, updated_order.id).await?;
         let items = db_items.iter().map(OrderItemSnapshot::from).collect();
 
         Ok(Order {

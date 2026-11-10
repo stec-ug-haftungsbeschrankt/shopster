@@ -10,7 +10,7 @@ use diesel_async::RunQueryDsl;
 use uuid::Uuid;
 use crate::ShopsterError;
 use crate::schema::*;
-use crate::aquire_pool;
+use crate::TenantDb;
 use argon2::{Config, ThreadMode, Variant, Version};
 use std::sync::OnceLock;
 
@@ -82,16 +82,16 @@ impl From<&DbCustomer> for DbCustomerMessage {
 
 
 impl DbCustomer {
-    pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_all(tenant: &TenantDb) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let customers = customers::table.load(&mut conn).await?;
         Ok(customers)
     }
 
-    pub async fn find(tenant_id: Uuid, customer_id: Uuid) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find(tenant: &TenantDb, customer_id: Uuid) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let customer = customers::table
@@ -100,8 +100,8 @@ impl DbCustomer {
         Ok(customer)
     }
 
-    pub async fn find_by_email(tenant_id: Uuid, email: String) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn find_by_email(tenant: &TenantDb, email: String) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let customer = customers::table
@@ -110,8 +110,8 @@ impl DbCustomer {
         Ok(customer)
     }
 
-    pub async fn create(tenant_id: Uuid, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn create(tenant: &TenantDb, customer: DbCustomerMessage) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let mut new_customer = DbCustomer::from(&customer);
@@ -123,8 +123,8 @@ impl DbCustomer {
         Ok(db_customer)
     }
 
-    pub async fn update(tenant_id: Uuid, id: Uuid, profile: DbProfileMessage) -> Result<Self, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update(tenant: &TenantDb, id: Uuid, profile: DbProfileMessage) -> Result<Self, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let customer = diesel::update(customers::table)
@@ -136,8 +136,8 @@ impl DbCustomer {
 
     /// Updates only the hashed password and algorithm columns. Always call
     /// `hash_password()` on the customer before invoking this.
-    pub async fn update_password(tenant_id: Uuid, id: Uuid, password: &str, algorithm: &str) -> Result<(), ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn update_password(tenant: &TenantDb, id: Uuid, password: &str, algorithm: &str) -> Result<(), ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         diesel::update(customers::table)
@@ -150,8 +150,8 @@ impl DbCustomer {
         Ok(())
     }
 
-    pub async fn delete(tenant_id: Uuid, id: Uuid) -> Result<usize, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn delete(tenant: &TenantDb, id: Uuid) -> Result<usize, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let res = diesel::delete(
@@ -176,8 +176,8 @@ impl DbCustomer {
         Ok(argon2::verify_encoded(&self.password, password.as_bytes())?)
     }
 
-    pub async fn count(tenant_id: Uuid) -> Result<i64, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn count(tenant: &TenantDb) -> Result<i64, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let count: i64 = customers::table
@@ -186,8 +186,8 @@ impl DbCustomer {
         Ok(count)
     }
 
-    pub async fn search(tenant_id: Uuid, search_term: &str) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn search(tenant: &TenantDb, search_term: &str) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let like_term = format!("%{}%", search_term);
@@ -201,8 +201,8 @@ impl DbCustomer {
         Ok(customers)
     }
 
-    pub async fn get_with_pagination(tenant_id: Uuid, page: i64, per_page: i64) -> Result<Vec<Self>, ShopsterError> {
-        let pool = aquire_pool(tenant_id).await?;
+    pub async fn get_with_pagination(tenant: &TenantDb, page: i64, per_page: i64) -> Result<Vec<Self>, ShopsterError> {
+        let pool = tenant.pool().await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
 
         let offset = (page - 1) * per_page;

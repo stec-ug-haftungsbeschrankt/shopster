@@ -66,7 +66,7 @@ let orders = shopster.orders(tenant_id)?;
 
 ### Connection Management
 
-- **DatabaseSelector**: Global singleton that maintains:
+- **DatabaseSelector**: Owned by `Shopster` (shared with handlers via `Arc`, no global state); maintains:
   - Tenant-to-Tenet metadata mapping
   - Per-tenant connection pool cache
   - Automatic database creation and migration
@@ -304,7 +304,7 @@ Every operation explicitly requires a tenant ID, preventing accidental cross-ten
 Public API uses high-level domain models (Customer, Product, Order) not database models, hiding schema details and enabling schema evolution.
 
 ### 3. **Connection Caching Per Tenant**
-Avoids per-request connection setup overhead while supporting multi-tenancy, implemented via `DatabaseSelector` singleton.
+Avoids per-request connection setup overhead while supporting multi-tenancy, implemented via a per-`Shopster` `DatabaseSelector` (handlers carry a `TenantDb` handle).
 
 ### 4. **Snapshots for Historical Data**
 Order items capture product state at order time, preserved indefinitely even if product is later modified or deleted.
