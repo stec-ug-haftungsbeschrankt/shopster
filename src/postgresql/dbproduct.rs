@@ -3,11 +3,13 @@ use serde::{Serialize, Deserialize};
 use diesel::{
     self,
     Queryable,
+    QueryableByName,
     Insertable
 };
 use diesel::prelude::*;
 use diesel_async::RunQueryDsl;
 use uuid::Uuid;
+use crate::products::ProductSort;
 use crate::ShopsterError;
 use crate::schema::*;
 use crate::aquire_pool;
@@ -15,7 +17,7 @@ use crate::aquire_pool;
 
 
 
-#[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
+#[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, QueryableByName, Insertable, AsChangeset)]
 #[diesel(table_name = products)]
 pub struct DbProduct {
     pub id: i64,
@@ -96,6 +98,61 @@ impl DbProduct {
             .first(&mut conn).await
             .optional()?;
         Ok(product)
+    }
+
+    pub async fn search(
+        tenant_id: Uuid,
+        query: &Option<String>,
+        tags: &[String],
+        sort: ProductSort,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Self>, i64), ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        // Build boxed queries for composable filtering.
+        let mut data_q = products::table.into_boxed();
+        let mut count_q = products::table.into_boxed();
+
+        if let Some(q) = query {
+            let pattern = format!("%{}%", q);
+            data_q = data_q.filter(
+                products::title.ilike(pattern.clone())
+                    .or(products::short_description.ilike(pattern.clone()))
+                    .or(products::description.ilike(pattern.clone()))
+                    .or(products::article_number.ilike(pattern.clone()))
+            );
+            count_q = count_q.filter(
+                products::title.ilike(pattern.clone())
+                    .or(products::short_description.ilike(pattern.clone()))
+                    .or(products::description.ilike(pattern.clone()))
+                    .or(products::article_number.ilike(pattern))
+            );
+        }
+
+        for tag in tags {
+            // Tags stored as pipe-separated e.g. "foo|bar|baz".
+            // Matching by padding both sides with pipes for exact tag boundaries.
+            let pattern = format!("%|{}|%", tag);
+            let padded_col = diesel::dsl::sql::<diesel::sql_types::Text>("('|' || tags || '|')");
+            data_q = data_q.filter(padded_col.clone().like(pattern.clone()));
+            count_q = count_q.filter(padded_col.like(pattern));
+        }
+
+        let total: i64 = count_q.count().get_result(&mut conn).await?;
+
+        data_q = match sort {
+            ProductSort::TitleAsc => data_q.order(products::title.asc()),
+            ProductSort::TitleDesc => data_q.order(products::title.desc()),
+            ProductSort::PriceAsc => data_q.order(products::price.asc()),
+            ProductSort::PriceDesc => data_q.order(products::price.desc()),
+            ProductSort::CreatedAtDesc => data_q.order(products::created_at.desc()),
+        };
+
+        let items: Vec<DbProduct> = data_q.limit(limit).offset(offset).load(&mut conn).await?;
+
+        Ok((items, total))
     }
 
     pub async fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {

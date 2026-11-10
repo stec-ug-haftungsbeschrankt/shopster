@@ -309,6 +309,52 @@ impl DbOrderItem {
 
 impl DbOrder {
 
+    pub async fn list(
+        tenant_id: Uuid,
+        status: Option<DbOrderStatus>,
+        payment_status: Option<DbPaymentStatus>,
+        customer_id: Option<Uuid>,
+        limit: i64,
+        offset: i64,
+    ) -> Result<(Vec<Self>, i64), ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        // We build the filtered query using Diesel's boxed queries for composability.
+        let mut base = orders::table.into_boxed();
+        if let Some(s) = status {
+            base = base.filter(orders::status.eq(s));
+        }
+        if let Some(ps) = payment_status {
+            base = base.filter(orders::payment_status.eq(ps));
+        }
+        if let Some(cid) = customer_id {
+            base = base.filter(orders::customer_id.eq(cid));
+        }
+
+        let total: i64 = {
+            let mut count_query = orders::table.into_boxed();
+            if let Some(s) = status {
+                count_query = count_query.filter(orders::status.eq(s));
+            }
+            if let Some(ps) = payment_status {
+                count_query = count_query.filter(orders::payment_status.eq(ps));
+            }
+            if let Some(cid) = customer_id {
+                count_query = count_query.filter(orders::customer_id.eq(cid));
+            }
+            count_query.count().get_result(&mut conn).await?
+        };
+
+        let items: Vec<DbOrder> = base
+            .order(orders::created_at.desc())
+            .limit(limit)
+            .offset(offset)
+            .load(&mut conn).await?;
+
+        Ok((items, total))
+    }
+
     pub async fn find(tenant_id: Uuid, id: i64) -> Result<Self, ShopsterError> {
         let pool = aquire_pool(tenant_id).await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;

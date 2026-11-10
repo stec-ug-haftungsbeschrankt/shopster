@@ -8,6 +8,38 @@ use serde_derive::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use uuid::Uuid;
 
+/// Sort order for product search results.
+#[derive(Debug, Clone, Copy, Default)]
+pub enum ProductSort {
+    /// Newest products first (default).
+    #[default]
+    CreatedAtDesc,
+    TitleAsc,
+    TitleDesc,
+    PriceAsc,
+    PriceDesc,
+}
+
+/// Parameters for [`Products::search`].
+#[derive(Debug, Clone, Default)]
+pub struct ProductSearchParams {
+    /// Case-insensitive substring match against title, descriptions, and article_number.
+    pub query: Option<String>,
+    /// Filter to products that have ALL of these tags.
+    pub tags: Vec<String>,
+    pub sort: ProductSort,
+    /// Maximum number of results to return (default: 50).
+    pub limit: i64,
+    /// Number of results to skip for pagination (default: 0).
+    pub offset: i64,
+}
+
+/// A page of results with a total count for pagination.
+pub struct PagedResult<T> {
+    pub items: Vec<T>,
+    pub total: i64,
+}
+
 /// Product pricing information.
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct Price {
@@ -110,6 +142,16 @@ pub struct Products {
 impl Products {
     pub fn new(tenant_id: Uuid) -> Self {
         Products { tenant_id }
+    }
+
+    /// Search and filter products with pagination.
+    pub async fn search(&self, params: ProductSearchParams) -> Result<PagedResult<Product>, ShopsterError> {
+        let limit = if params.limit <= 0 { 50 } else { params.limit };
+        let offset = if params.offset < 0 { 0 } else { params.offset };
+
+        let (db_products, total) = DbProduct::search(self.tenant_id, &params.query, &params.tags, params.sort, limit, offset).await?;
+        let items = db_products.iter().map(Product::from).collect();
+        Ok(PagedResult { items, total })
     }
 
     pub async fn get_all(&self) -> Result<Vec<Product>, ShopsterError> {

@@ -6,7 +6,7 @@ use uuid::Uuid;
 use stec_tenet::{Storage, Tenet};
 use stec_shopster::{DatabaseSelector, DbOrderStatus, DbPaymentStatus, Shopster};
 use stec_shopster::customers::Customer;
-use stec_shopster::orders::{Order, OrderItemSnapshot, OrderItemPrice, OrderStatus, PaymentStatus};
+use stec_shopster::orders::{Order, OrderItemSnapshot, OrderItemPrice, OrderListFilter, OrderStatus, PaymentStatus};
 use stec_shopster::products::{Price, Product};
 use stec_shopster::warehouse::WarehouseItem;
 use stec_tenet::encryption_modes::EncryptionModes;
@@ -793,4 +793,97 @@ fn test_payment_status_round_trip_conversion() {
             .expect("Should successfully convert valid i32 back to DbPaymentStatus");
         assert_eq!(converted_back, original_status, "Round-trip conversion failed for status: {:?}", original_status);
     }
+}
+
+#[tokio::test]
+async fn order_list_filter_by_status_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_list_filter_status".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+        let orders = shopster.orders(tenant.id).unwrap();
+
+        orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        let done = orders.insert(&make_order(OrderStatus::Done)).await.unwrap();
+
+        let (new_orders, total) = orders.list(
+            OrderListFilter { status: Some(OrderStatus::New), ..Default::default() },
+            10, 0,
+        ).await.unwrap();
+        assert_eq!(2, total);
+        assert_eq!(2, new_orders.len());
+
+        let (done_orders, _) = orders.list(
+            OrderListFilter { status: Some(OrderStatus::Done), ..Default::default() },
+            10, 0,
+        ).await.unwrap();
+        assert_eq!(1, done_orders.len());
+        assert_eq!(done.id, done_orders[0].id);
+    }).await;
+}
+
+#[tokio::test]
+async fn order_list_filter_by_payment_status_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_list_filter_payment".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+        let orders = shopster.orders(tenant.id).unwrap();
+
+        orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        let paid_order = orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        orders.update_payment_status(paid_order.id, PaymentStatus::Paid).await.unwrap();
+
+        let (pending, total) = orders.list(
+            OrderListFilter { payment_status: Some(PaymentStatus::Pending), ..Default::default() },
+            10, 0,
+        ).await.unwrap();
+        assert_eq!(1, total);
+        assert_eq!(1, pending.len());
+
+        let (paid, _) = orders.list(
+            OrderListFilter { payment_status: Some(PaymentStatus::Paid), ..Default::default() },
+            10, 0,
+        ).await.unwrap();
+        assert_eq!(1, paid.len());
+        assert_eq!(paid_order.id, paid[0].id);
+    }).await;
+}
+
+#[tokio::test]
+async fn order_list_pagination_test() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("order_list_pagination".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let database_selector = DatabaseSelector::new(tenet);
+        let shopster = Shopster::new(database_selector);
+        let orders = shopster.orders(tenant.id).unwrap();
+
+        for _ in 0..5 {
+            orders.insert(&make_order(OrderStatus::New)).await.unwrap();
+        }
+
+        let (page1, total) = orders.list(OrderListFilter::default(), 2, 0).await.unwrap();
+        assert_eq!(5, total);
+        assert_eq!(2, page1.len());
+
+        let (page2, _) = orders.list(OrderListFilter::default(), 2, 2).await.unwrap();
+        assert_eq!(2, page2.len());
+        assert_ne!(page1[0].id, page2[0].id);
+
+        let (page3, _) = orders.list(OrderListFilter::default(), 2, 4).await.unwrap();
+        assert_eq!(1, page3.len());
+    }).await;
 }
