@@ -18,7 +18,8 @@ pub struct DbSetting {
     pub id: i32,
     pub title: String,
     pub datatype: String,
-    pub value: String
+    pub value: String,
+    pub is_secret: bool
 }
 
 

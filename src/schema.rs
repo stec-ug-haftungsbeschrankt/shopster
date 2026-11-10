@@ -148,6 +148,7 @@ diesel::table! {
         title -> Text,
         datatype -> Text,
         value -> Text,
+        is_secret -> Bool,
     }
 }
 

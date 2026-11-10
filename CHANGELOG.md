@@ -2,6 +2,25 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.6.0]
+
+### Security
+- `.env` is no longer tracked and is git-ignored; `.env.example` documents the variables. ([#33](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/33))
+- Tenant connection strings are no longer logged with their password (`redact_connection_string`). ([#34](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/34))
+- `DatabaseHelper` parses connection strings properly, validates database names (`[A-Za-z0-9_-]`, max 63) before using them in `CREATE`/`DROP DATABASE`, returns errors instead of panicking, and `is_database_exists` now distinguishes a missing database from an unreachable server or bad credentials. ([#35](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/35))
+- Passwords are hashed with **Argon2id** (19 MiB, t=2, p=1) instead of the legacy Argon2i defaults. Old hashes keep verifying and are rehashed on successful login. Unknown e-mail and wrong password now both return `AuthenticationError` (previously the unknown e-mail returned a `DatabaseError`) and take comparable time. ([#37](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/37))
+- Secret settings (`stripe_secret_api_key`, `stripe_webhook_secret`, `sendgrid_api_key`) are encrypted at rest (AES-256-GCM, key supplied via `DatabaseSelector::with_secret_key`). New `Settings::get_secret`, `set_secret`, `encrypt_legacy_secrets`. ([#38](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/38))
+
+### Changed (breaking)
+- `Settings::get_all` no longer returns secret settings; `Setting` gained `is_secret` and `value` is empty for secrets; `Settings::update_by_id` refuses secret settings (use `set_secret`).
+- A failed `CREATE DATABASE` or migration now makes `DatabaseSelector::get_storage_for_tenant` return `ShopsterError::DatabaseMigrationError` / the underlying error and is retried on the next call, instead of logging a warning and caching a pool for a half-migrated schema. ([#36](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/36))
+- Using a handler before `Shopster::new` returns the new `ShopsterError::NotInitialized` instead of panicking. (Partially addresses [#39](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/39); the global `DatabaseSelector` singleton is still in place.)
+- `DatabaseHelper::create_database`/`is_database_exists`/`drop_database` return `ShopsterError` results (internal module).
+- `simple_logger` moved to dev-dependencies; applications choose their own logger. ([#40](https://github.com/stec-ug-haftungsbeschrankt/shopster/issues/40))
+
+### Migrations
+- `2026-11-10-060000_settings_secrets` (adds `settings.is_secret`, flags the three secret settings)
+
 ## [0.5.0]
 
 ### Added
