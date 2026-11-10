@@ -15,6 +15,14 @@ use crate::postgresql::dborder::DbOrderStatus;
 use crate::postgresql::dborder::DbPaymentStatus;
 use crate::postgresql::dbwarehouse::DbWarehouse;
 
+/// Filter for [`Orders::list`].
+#[derive(Debug, Clone, Default)]
+pub struct OrderListFilter {
+    pub status: Option<OrderStatus>,
+    pub payment_status: Option<PaymentStatus>,
+    pub customer_id: Option<Uuid>,
+}
+
 /// The lifecycle status of an order.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum OrderStatus {
@@ -235,6 +243,41 @@ impl Orders {
                 | (OrderStatus::ReadyToShip, OrderStatus::Cancelled)
                 | (OrderStatus::Shipping, OrderStatus::Cancelled)
         )
+    }
+
+    /// Lists orders with optional filtering and pagination. Returns (items, total_count).
+    pub async fn list(&self, filter: OrderListFilter, limit: i64, offset: i64) -> Result<(Vec<Order>, i64), ShopsterError> {
+        let limit = if limit <= 0 { 50 } else { limit };
+        let offset = if offset < 0 { 0 } else { offset };
+
+        let (db_orders, total) = DbOrder::list(
+            self.tenant_id,
+            filter.status.map(DbOrderStatus::from),
+            filter.payment_status.map(DbPaymentStatus::from),
+            filter.customer_id,
+            limit,
+            offset,
+        ).await?;
+
+        let mut orders = Vec::new();
+        for db_order in db_orders {
+            let db_items = DbOrderItem::get_for_order(self.tenant_id, db_order.id).await?;
+            let items = db_items.iter().map(OrderItemSnapshot::from).collect();
+            orders.push(Order {
+                id: db_order.id,
+                customer_id: db_order.customer_id,
+                status: db_order.status.into(),
+                delivery_address: db_order.delivery_address,
+                billing_address: db_order.billing_address,
+                items,
+                created_at: db_order.created_at,
+                updated_at: db_order.updated_at,
+                payment_reference: db_order.payment_reference,
+                payment_status: db_order.payment_status.into(),
+            });
+        }
+
+        Ok((orders, total))
     }
 
     pub async fn get_all(&self) -> Result<Vec<Order>, ShopsterError> {
