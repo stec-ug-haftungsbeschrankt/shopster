@@ -27,6 +27,8 @@ fn make_order(status: OrderStatus) -> Order {
         coupon_code: None,
         discount_amount: None,
         charged_total: None,
+        contact_email: None,
+        contact_name: None,
     }
 }
 
@@ -180,6 +182,8 @@ async fn order_inventory_reservation_on_insert_test() {
             coupon_code: None,
             discount_amount: None,
             charged_total: None,
+            contact_email: None,
+            contact_name: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -244,6 +248,8 @@ async fn order_reservation_released_on_shipping_test() {
             coupon_code: None,
             discount_amount: None,
             charged_total: None,
+            contact_email: None,
+            contact_name: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -302,6 +308,8 @@ async fn order_create_from_basket_test() {
             "Billing Street 5, 99999 Billingtown".to_string(),
             None,
             PaymentStatus::Pending,
+            None,
+            None,
         ).await.unwrap();
 
         assert_eq!(OrderStatus::New, order.status);
@@ -437,6 +445,8 @@ async fn order_remove_releases_reservation_test() {
             coupon_code: None,
             discount_amount: None,
             charged_total: None,
+            contact_email: None,
+            contact_name: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
@@ -638,6 +648,8 @@ async fn order_cancel_from_new_releases_reservation_test() {
             coupon_code: None,
             discount_amount: None,
             charged_total: None,
+            contact_email: None,
+            contact_name: None,
         };
 
         let orders = shopster.orders(tenant.id).unwrap();
