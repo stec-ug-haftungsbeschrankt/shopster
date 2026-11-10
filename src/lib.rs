@@ -47,6 +47,7 @@ mod postgresql;
 mod schema;
 pub mod error;
 pub mod baskets;
+pub mod coupons;
 pub mod customers;
 pub mod products;
 pub mod orders;
@@ -80,6 +81,7 @@ use stec_tenet::Tenet;
 use uuid::Uuid;
 
 use baskets::Baskets;
+use coupons::Coupons;
 use customers::Customers;
 use payment_attempts::PaymentAttempts;
 use products::Products;
@@ -242,6 +244,11 @@ impl Shopster {
     /// Gets a `Baskets` handler for managing shopping carts.
     pub fn baskets(&self, tenant_id: Uuid) -> Result<Baskets, ShopsterError> {
         Ok(Baskets::new(tenant_id))
+    }
+
+    /// Gets a `Coupons` handler for discount coupon management.
+    pub fn coupons(&self, tenant_id: Uuid) -> Result<Coupons, ShopsterError> {
+        Ok(Coupons::new(tenant_id))
     }
 
     /// Gets a `Customers` handler for customer management.

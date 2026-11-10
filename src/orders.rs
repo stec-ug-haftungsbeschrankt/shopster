@@ -199,6 +199,9 @@ pub struct Order {
     pub updated_at: Option<NaiveDateTime>,
     pub payment_reference: Option<String>,
     pub payment_status: PaymentStatus,
+    pub coupon_code: Option<String>,
+    pub discount_amount: Option<i64>,
+    pub charged_total: Option<i64>,
 }
 
 impl From<&Order> for DbOrder {
@@ -213,6 +216,9 @@ impl From<&Order> for DbOrder {
             updated_at: Some(Utc::now().naive_utc()),
             payment_reference: order.payment_reference.clone(),
             payment_status: order.payment_status.into(),
+            coupon_code: order.coupon_code.clone(),
+            discount_amount: order.discount_amount,
+            charged_total: order.charged_total,
         }
     }
 }
@@ -299,6 +305,9 @@ impl Orders {
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
                 payment_status: db_order.payment_status.into(),
+                coupon_code: db_order.coupon_code,
+                discount_amount: db_order.discount_amount,
+                charged_total: db_order.charged_total,
             });
         }
 
@@ -321,6 +330,9 @@ impl Orders {
             updated_at: db_order.updated_at,
             payment_reference: db_order.payment_reference,
             payment_status: db_order.payment_status.into(),
+            coupon_code: db_order.coupon_code,
+            discount_amount: db_order.discount_amount,
+            charged_total: db_order.charged_total,
         })
     }
 
@@ -343,6 +355,9 @@ impl Orders {
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
                 payment_status: db_order.payment_status.into(),
+                coupon_code: db_order.coupon_code,
+                discount_amount: db_order.discount_amount,
+                charged_total: db_order.charged_total,
             });
         }
 
@@ -368,6 +383,9 @@ impl Orders {
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
                 payment_status: db_order.payment_status.into(),
+                coupon_code: db_order.coupon_code,
+                discount_amount: db_order.discount_amount,
+                charged_total: db_order.charged_total,
             });
         }
 
@@ -392,6 +410,9 @@ impl Orders {
             updated_at: db_order.updated_at,
             payment_reference: db_order.payment_reference,
             payment_status: db_order.payment_status.into(),
+            coupon_code: db_order.coupon_code,
+            discount_amount: db_order.discount_amount,
+            charged_total: db_order.charged_total,
         }))
     }
 
@@ -448,6 +469,9 @@ impl Orders {
                 updated_at: created_order.updated_at,
                 payment_reference: created_order.payment_reference,
                 payment_status: created_order.payment_status.into(),
+                coupon_code: created_order.coupon_code,
+                discount_amount: created_order.discount_amount,
+                charged_total: created_order.charged_total,
             })
         }).await
     }
@@ -498,6 +522,9 @@ impl Orders {
                 updated_at: updated_order.updated_at,
                 payment_reference: updated_order.payment_reference,
                 payment_status: updated_order.payment_status.into(),
+                coupon_code: updated_order.coupon_code,
+                discount_amount: updated_order.discount_amount,
+                charged_total: updated_order.charged_total,
             })
         }).await
     }
@@ -570,6 +597,9 @@ impl Orders {
             updated_at: None,
             payment_reference,
             payment_status,
+            coupon_code: None,
+            discount_amount: None,
+            charged_total: None,
         };
 
         self.insert(&order).await
@@ -596,6 +626,9 @@ impl Orders {
             updated_at: updated_order.updated_at,
             payment_reference: updated_order.payment_reference,
             payment_status: updated_order.payment_status.into(),
+            coupon_code: updated_order.coupon_code,
+            discount_amount: updated_order.discount_amount,
+            charged_total: updated_order.charged_total,
         })
     }
 }

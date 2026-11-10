@@ -171,6 +171,9 @@ pub struct DbOrder {
     pub updated_at: Option<NaiveDateTime>,
     pub payment_reference: Option<String>,
     pub payment_status: DbPaymentStatus,
+    pub coupon_code: Option<String>,
+    pub discount_amount: Option<i64>,
+    pub charged_total: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Insertable)]
@@ -184,6 +187,9 @@ pub struct InsertableDbOrder {
     pub updated_at: Option<NaiveDateTime>,
     pub payment_reference: Option<String>,
     pub payment_status: DbPaymentStatus,
+    pub coupon_code: Option<String>,
+    pub discount_amount: Option<i64>,
+    pub charged_total: Option<i64>,
 }
 
 impl From<&DbOrder> for InsertableDbOrder {
@@ -197,6 +203,9 @@ impl From<&DbOrder> for InsertableDbOrder {
             updated_at: order.updated_at,
             payment_reference: order.payment_reference.clone(),
             payment_status: order.payment_status,
+            coupon_code: order.coupon_code.clone(),
+            discount_amount: order.discount_amount,
+            charged_total: order.charged_total,
         }
     }
 }
