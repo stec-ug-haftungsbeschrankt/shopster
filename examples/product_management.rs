@@ -105,6 +105,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         reserved: 5,
         created_at: chrono::Utc::now().naive_utc(),
         updated_at: None,
+        low_stock_threshold: None,
     };
 
     let warehouse_item = warehouse.insert(&laptop_stock).await?;
