@@ -11,6 +11,21 @@ pub mod sql_types {
 }
 
 diesel::table! {
+    coupons (id) {
+        id -> Int8,
+        code -> Text,
+        percent_off -> Nullable<Int4>,
+        amount_off -> Nullable<Int8>,
+        currency -> Nullable<Text>,
+        valid_from -> Nullable<Timestamp>,
+        valid_until -> Nullable<Timestamp>,
+        max_uses -> Nullable<Int4>,
+        use_count -> Int4,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     basketproducts (id) {
         id -> Int8,
         product_id -> Int8,
@@ -76,6 +91,9 @@ diesel::table! {
         updated_at -> Nullable<Timestamp>,
         payment_reference -> Nullable<Text>,
         payment_status -> DbPaymentStatus,
+        coupon_code -> Nullable<Text>,
+        discount_amount -> Nullable<Int8>,
+        charged_total -> Nullable<Int8>,
     }
 }
 
@@ -151,6 +169,7 @@ diesel::joinable!(orders -> customers (customer_id));
 diesel::allow_tables_to_appear_in_same_query!(
     basketproducts,
     baskets,
+    coupons,
     customers,
     order_items,
     orders,

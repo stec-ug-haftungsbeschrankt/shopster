@@ -81,6 +81,9 @@ async fn order_test() {
             updated_at: None,
             payment_reference: None,
             payment_status: PaymentStatus::Pending,
+            coupon_code: None,
+            discount_amount: None,
+            charged_total: None,
         };
 
         let _ = orders.insert(&new_order).await.unwrap();
