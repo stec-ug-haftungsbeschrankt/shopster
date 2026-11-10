@@ -110,6 +110,18 @@ diesel::table! {
 }
 
 diesel::table! {
+    payment_attempts (id) {
+        id -> Int8,
+        payment_intent_id -> Text,
+        reason -> Text,
+        basket_id -> Nullable<Uuid>,
+        amount -> Int8,
+        currency -> Text,
+        created_at -> Timestamp,
+    }
+}
+
+diesel::table! {
     settings (id) {
         id -> Int4,
         title -> Text,
@@ -141,6 +153,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     customers,
     order_items,
     orders,
+    payment_attempts,
     products,
     settings,
     warehouse,
