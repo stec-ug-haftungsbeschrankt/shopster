@@ -167,6 +167,50 @@ impl From<&DbBasket> for InsertableDbBasket {
 
 
 impl DbBasket {
+    pub async fn touch(tenant_id: Uuid, basket_id: Uuid) -> Result<(), ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+        Self::touch_conn(&mut conn, basket_id).await
+    }
+
+    pub async fn touch_conn(conn: &mut AsyncPgConnection, basket_id: Uuid) -> Result<(), ShopsterError> {
+        diesel::update(baskets::table.filter(baskets::id.eq(basket_id)))
+            .set(baskets::updated_at.eq(Some(Utc::now().naive_utc())))
+            .execute(conn).await?;
+        Ok(())
+    }
+
+    /// Deletes all baskets (and their products) where the last-activity timestamp is before
+    /// `cutoff`. Last activity is `COALESCE(updated_at, created_at)`.
+    pub async fn delete_older_than(tenant_id: Uuid, cutoff: NaiveDateTime) -> Result<usize, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        use diesel_async::AsyncConnection;
+        conn.transaction(async |conn| {
+            // Find basket ids to delete
+            let stale_ids: Vec<Uuid> = baskets::table
+                .select(baskets::id)
+                .filter(
+                    baskets::updated_at.assume_not_null().lt(cutoff)
+                        .or(baskets::updated_at.is_null().and(baskets::created_at.lt(cutoff)))
+                )
+                .load(conn).await?;
+
+            if stale_ids.is_empty() {
+                return Ok(0);
+            }
+
+            diesel::delete(basketproducts::table.filter(basketproducts::basket_id.eq_any(&stale_ids)))
+                .execute(conn).await?;
+
+            let deleted = diesel::delete(baskets::table.filter(baskets::id.eq_any(&stale_ids)))
+                .execute(conn).await?;
+
+            Ok(deleted)
+        }).await
+    }
+
     pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
         let pool = aquire_pool(tenant_id).await?;
         let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
