@@ -1,6 +1,7 @@
 use diesel::{Connection, sql_query, RunQueryDsl, PgConnection};
 
 pub mod dbbasket;
+pub mod dbpaymentattempt;
 pub mod dbcustomer;
 pub mod dbimage;
 pub mod dborder;

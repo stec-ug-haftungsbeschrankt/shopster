@@ -50,6 +50,7 @@ pub mod baskets;
 pub mod customers;
 pub mod products;
 pub mod orders;
+pub mod payment_attempts;
 pub mod settings;
 pub mod warehouse;
 pub use orders::OrderStatus;
@@ -80,6 +81,7 @@ use uuid::Uuid;
 
 use baskets::Baskets;
 use customers::Customers;
+use payment_attempts::PaymentAttempts;
 use products::Products;
 use orders::Orders;
 use settings::Settings;
@@ -265,5 +267,10 @@ impl Shopster {
     /// Gets a `Warehouse` handler for inventory management.
     pub fn warehouse(&self, tenant_id: Uuid) -> Result<Warehouse, ShopsterError> {
         Ok(Warehouse::new(tenant_id))
+    }
+
+    /// Gets a `PaymentAttempts` handler for recording and querying failed payment attempts.
+    pub fn payment_attempts(&self, tenant_id: Uuid) -> Result<PaymentAttempts, ShopsterError> {
+        Ok(PaymentAttempts::new(tenant_id))
     }
 }
