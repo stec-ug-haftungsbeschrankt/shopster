@@ -289,6 +289,7 @@ async fn order_create_from_basket_test() {
             "Delivery Street 5, 99999 Deliverytown".to_string(),
             "Billing Street 5, 99999 Billingtown".to_string(),
             None,
+            shopster::orders::PaymentStatus::Pending,
         ).await.unwrap();
 
         assert_eq!(OrderStatus::New, order.status);
