@@ -13,7 +13,7 @@ use crate::ShopsterError;
 use crate::schema::*;
 use crate::aquire_pool;
 
-#[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, Insertable, AsChangeset)]
+#[derive(Debug, Serialize, Deserialize, Identifiable, PartialEq, Queryable, QueryableByName, Insertable, AsChangeset)]
 #[diesel(table_name = warehouse)]
 pub struct DbWarehouse {
     pub id: i64,
@@ -22,6 +22,7 @@ pub struct DbWarehouse {
     pub reserved: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    pub low_stock_threshold: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Insertable)]
@@ -32,6 +33,7 @@ pub struct InsertableDbWarehouse {
     pub reserved: i64,
     pub created_at: NaiveDateTime,
     pub updated_at: Option<NaiveDateTime>,
+    pub low_stock_threshold: Option<i64>,
 }
 
 impl From<&DbWarehouse> for InsertableDbWarehouse {
@@ -42,6 +44,7 @@ impl From<&DbWarehouse> for InsertableDbWarehouse {
             reserved: item.reserved,
             created_at: item.created_at,
             updated_at: item.updated_at,
+            low_stock_threshold: item.low_stock_threshold,
         }
     }
 }
@@ -55,6 +58,21 @@ impl DbWarehouse {
             .filter(warehouse::product_id.eq(product_id))
             .first(&mut conn).await?;
         Ok(item)
+    }
+
+    /// Returns warehouse items where `in_stock - reserved <= effective_threshold`.
+    /// The effective threshold per item is `low_stock_threshold.unwrap_or(default_threshold)`.
+    pub async fn get_low_stock(tenant_id: Uuid, default_threshold: i64) -> Result<Vec<Self>, ShopsterError> {
+        let pool = aquire_pool(tenant_id).await?;
+        let mut conn = pool.get().await.map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
+
+        // COALESCE(low_stock_threshold, default_threshold) gives the per-item threshold.
+        let items = diesel::sql_query(
+            "SELECT * FROM warehouse WHERE (in_stock - reserved) <= COALESCE(low_stock_threshold, $1)"
+        )
+        .bind::<diesel::sql_types::BigInt, _>(default_threshold)
+        .load(&mut conn).await?;
+        Ok(items)
     }
 
     pub async fn get_all(tenant_id: Uuid) -> Result<Vec<Self>, ShopsterError> {
@@ -145,6 +163,7 @@ impl DbWarehouse {
                     reserved: delta,
                     created_at: now,
                     updated_at: Some(now),
+                    low_stock_threshold: None,
                 };
                 Ok(diesel::insert_into(warehouse::table)
                     .values(insertable)

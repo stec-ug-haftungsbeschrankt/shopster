@@ -145,6 +145,7 @@ async fn order_inventory_reservation_on_insert_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         // Insert a New order with items — New is a reserving status
@@ -206,6 +207,7 @@ async fn order_reservation_released_on_shipping_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let order_with_item = Order {
@@ -277,6 +279,7 @@ async fn order_create_from_basket_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let baskets = shopster.baskets(tenant.id).unwrap();
@@ -394,6 +397,7 @@ async fn order_remove_releases_reservation_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let order_with_item = Order {
@@ -591,6 +595,7 @@ async fn order_cancel_from_new_releases_reservation_test() {
             reserved: 0,
             created_at: Utc::now().naive_utc(),
             updated_at: None,
+            low_stock_threshold: None,
         }).await.unwrap();
 
         let order_with_item = Order {

@@ -106,6 +106,7 @@ diesel::table! {
         reserved -> Int8,
         created_at -> Timestamp,
         updated_at -> Nullable<Timestamp>,
+        low_stock_threshold -> Nullable<Int8>,
     }
 }
 
