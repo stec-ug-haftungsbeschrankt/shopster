@@ -352,6 +352,14 @@ impl Orders {
         }))
     }
 
+    /// Inserts a new order and reserves warehouse stock atomically.
+    ///
+    /// # Stock reservation
+    ///
+    /// For orders with status `New`, `InProgress`, or `ReadyToShip`, this method
+    /// increments the `reserved` counter in the warehouse for each item as part of
+    /// the same database transaction. Callers that use [`Orders::create_from_basket`]
+    /// must not perform a separate reservation — it is already handled here.
     pub async fn insert(&self, order: &Order) -> Result<Order, ShopsterError> {
         if order.delivery_address.trim().is_empty() {
             return Err(ShopsterError::InvalidOperationError(
@@ -468,7 +476,16 @@ impl Orders {
         Ok(result > 0)
     }
 
-    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String, payment_reference: Option<String>) -> Result<Order, ShopsterError> {
+    /// Creates an order from a basket in a single atomic transaction.
+    ///
+    /// # Stock reservation
+    ///
+    /// This method calls [`Orders::insert`] internally, which reserves warehouse stock
+    /// for every item as part of the same transaction. Callers must **not** reserve stock
+    /// separately before calling this method — doing so will double-count the reservation.
+    /// Stock is released automatically when the order transitions to `Cancelled` via
+    /// [`Orders::update`].
+    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String, payment_reference: Option<String>, payment_status: PaymentStatus) -> Result<Order, ShopsterError> {
         let baskets = Baskets::new(self.tenant_id);
         let basket_items = baskets.get_products_with_details(basket_id).await?;
 
@@ -509,7 +526,7 @@ impl Orders {
             created_at: Utc::now().naive_utc(),
             updated_at: None,
             payment_reference,
-            payment_status: PaymentStatus::Pending,
+            payment_status,
         };
 
         self.insert(&order).await
