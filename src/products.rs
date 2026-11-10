@@ -2,6 +2,7 @@
 
 use crate::error::ShopsterError;
 use crate::postgresql::dbproduct::DbProduct;
+use diesel::result::{DatabaseErrorKind, Error as DieselError};
 use chrono::{NaiveDateTime, Utc};
 use serde_derive::{Deserialize, Serialize};
 use std::convert::TryFrom;
@@ -88,6 +89,19 @@ impl TryFrom<&Product> for DbProduct {
 }
 
 
+fn map_product_unique_violation(e: ShopsterError) -> ShopsterError {
+    if let ShopsterError::DatabaseError(DieselError::DatabaseError(DatabaseErrorKind::UniqueViolation, ref info)) = e {
+        let constraint = info.constraint_name().unwrap_or("");
+        if constraint.contains("article_number") {
+            return ShopsterError::ConflictError("Article number already exists".to_string());
+        }
+        if constraint.contains("gtin") {
+            return ShopsterError::ConflictError("GTIN already exists".to_string());
+        }
+    }
+    e
+}
+
 /// Handler for product management operations.
 pub struct Products {
     tenant_id: Uuid
@@ -110,6 +124,16 @@ impl Products {
         Ok(product)
     }
 
+    pub async fn find_by_article_number(&self, article_number: &str) -> Result<Option<Product>, ShopsterError> {
+        let db_product = DbProduct::find_by_article_number(self.tenant_id, article_number).await?;
+        Ok(db_product.as_ref().map(Product::from))
+    }
+
+    pub async fn find_by_gtin(&self, gtin: &str) -> Result<Option<Product>, ShopsterError> {
+        let db_product = DbProduct::find_by_gtin(self.tenant_id, gtin).await?;
+        Ok(db_product.as_ref().map(Product::from))
+    }
+
     pub async fn insert(&self, product: &Product) -> Result<Product, ShopsterError> {
         if product.title.trim().is_empty() {
             return Err(ShopsterError::InvalidOperationError(
@@ -124,7 +148,8 @@ impl Products {
             }
         }
         let db_product = DbProduct::try_from(product)?;
-        let created_product = DbProduct::create(self.tenant_id, db_product).await?;
+        let created_product = DbProduct::create(self.tenant_id, db_product).await
+            .map_err(map_product_unique_violation)?;
 
         let reply = Product::from(&created_product);
         Ok(reply)
@@ -144,7 +169,8 @@ impl Products {
             }
         }
         let db_product = DbProduct::try_from(product)?;
-        let updated_product = DbProduct::update(self.tenant_id, product.id, db_product).await?;
+        let updated_product = DbProduct::update(self.tenant_id, product.id, db_product).await
+            .map_err(map_product_unique_violation)?;
 
         let reply = Product::from(&updated_product);
         Ok(reply)

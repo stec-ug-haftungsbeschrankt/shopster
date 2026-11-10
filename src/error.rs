@@ -56,4 +56,8 @@ pub enum ShopsterError {
     /// An internal error occurred (e.g., mutex poisoned).
     #[error("Internal Error: {0}")]
     InternalError(String),
+
+    /// A unique constraint would be violated by the requested operation.
+    #[error("Conflict: {0}")]
+    ConflictError(String),
 }
