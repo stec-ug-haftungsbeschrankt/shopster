@@ -280,6 +280,9 @@ impl Orders {
                 updated_at: db_order.updated_at,
                 payment_reference: db_order.payment_reference,
                 payment_status: db_order.payment_status.into(),
+                coupon_code: db_order.coupon_code,
+                discount_amount: db_order.discount_amount,
+                charged_total: db_order.charged_total,
             });
         }
 
