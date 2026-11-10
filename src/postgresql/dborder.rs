@@ -174,6 +174,8 @@ pub struct DbOrder {
     pub coupon_code: Option<String>,
     pub discount_amount: Option<i64>,
     pub charged_total: Option<i64>,
+    pub contact_email: Option<String>,
+    pub contact_name: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Insertable)]
@@ -190,6 +192,8 @@ pub struct InsertableDbOrder {
     pub coupon_code: Option<String>,
     pub discount_amount: Option<i64>,
     pub charged_total: Option<i64>,
+    pub contact_email: Option<String>,
+    pub contact_name: Option<String>,
 }
 
 impl From<&DbOrder> for InsertableDbOrder {
@@ -206,6 +210,8 @@ impl From<&DbOrder> for InsertableDbOrder {
             coupon_code: order.coupon_code.clone(),
             discount_amount: order.discount_amount,
             charged_total: order.charged_total,
+            contact_email: order.contact_email.clone(),
+            contact_name: order.contact_name.clone(),
         }
     }
 }

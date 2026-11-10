@@ -94,6 +94,8 @@ diesel::table! {
         coupon_code -> Nullable<Text>,
         discount_amount -> Nullable<Int8>,
         charged_total -> Nullable<Int8>,
+        contact_email -> Nullable<Text>,
+        contact_name -> Nullable<Text>,
     }
 }
 

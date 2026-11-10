@@ -202,6 +202,10 @@ pub struct Order {
     pub coupon_code: Option<String>,
     pub discount_amount: Option<i64>,
     pub charged_total: Option<i64>,
+    /// Email address of the guest customer (set when `customer_id` is `None`).
+    pub contact_email: Option<String>,
+    /// Full name of the guest customer (set when `customer_id` is `None`).
+    pub contact_name: Option<String>,
 }
 
 impl From<&Order> for DbOrder {
@@ -219,6 +223,8 @@ impl From<&Order> for DbOrder {
             coupon_code: order.coupon_code.clone(),
             discount_amount: order.discount_amount,
             charged_total: order.charged_total,
+            contact_email: order.contact_email.clone(),
+            contact_name: order.contact_name.clone(),
         }
     }
 }
@@ -283,6 +289,8 @@ impl Orders {
                 coupon_code: db_order.coupon_code,
                 discount_amount: db_order.discount_amount,
                 charged_total: db_order.charged_total,
+                contact_email: db_order.contact_email,
+                contact_name: db_order.contact_name,
             });
         }
 
@@ -311,6 +319,8 @@ impl Orders {
                 coupon_code: db_order.coupon_code,
                 discount_amount: db_order.discount_amount,
                 charged_total: db_order.charged_total,
+                contact_email: db_order.contact_email,
+                contact_name: db_order.contact_name,
             });
         }
 
@@ -336,6 +346,8 @@ impl Orders {
             coupon_code: db_order.coupon_code,
             discount_amount: db_order.discount_amount,
             charged_total: db_order.charged_total,
+            contact_email: db_order.contact_email,
+            contact_name: db_order.contact_name,
         })
     }
 
@@ -361,6 +373,8 @@ impl Orders {
                 coupon_code: db_order.coupon_code,
                 discount_amount: db_order.discount_amount,
                 charged_total: db_order.charged_total,
+                contact_email: db_order.contact_email,
+                contact_name: db_order.contact_name,
             });
         }
 
@@ -389,6 +403,8 @@ impl Orders {
                 coupon_code: db_order.coupon_code,
                 discount_amount: db_order.discount_amount,
                 charged_total: db_order.charged_total,
+                contact_email: db_order.contact_email,
+                contact_name: db_order.contact_name,
             });
         }
 
@@ -416,6 +432,8 @@ impl Orders {
             coupon_code: db_order.coupon_code,
             discount_amount: db_order.discount_amount,
             charged_total: db_order.charged_total,
+            contact_email: db_order.contact_email,
+            contact_name: db_order.contact_name,
         }))
     }
 
@@ -475,6 +493,8 @@ impl Orders {
                 coupon_code: created_order.coupon_code,
                 discount_amount: created_order.discount_amount,
                 charged_total: created_order.charged_total,
+                contact_email: created_order.contact_email,
+                contact_name: created_order.contact_name,
             })
         }).await
     }
@@ -528,6 +548,8 @@ impl Orders {
                 coupon_code: updated_order.coupon_code,
                 discount_amount: updated_order.discount_amount,
                 charged_total: updated_order.charged_total,
+                contact_email: updated_order.contact_email,
+                contact_name: updated_order.contact_name,
             })
         }).await
     }
@@ -557,8 +579,10 @@ impl Orders {
     /// for every item as part of the same transaction. Callers must **not** reserve stock
     /// separately before calling this method — doing so will double-count the reservation.
     /// Stock is released automatically when the order transitions to `Cancelled` via
-    /// [`Orders::update`].
-    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String, payment_reference: Option<String>, payment_status: PaymentStatus) -> Result<Order, ShopsterError> {
+    /// [`Orders::update`]. For guest (storefront) orders where `customer_id` will be
+    /// `None`, pass `contact_email` and `contact_name` so later notifications and admin
+    /// views have a name and email to work with.
+    pub async fn create_from_basket(&self, basket_id: Uuid, delivery_address: String, billing_address: String, payment_reference: Option<String>, payment_status: PaymentStatus, contact_email: Option<String>, contact_name: Option<String>) -> Result<Order, ShopsterError> {
         let baskets = Baskets::new(self.tenant_id);
         let basket_items = baskets.get_products_with_details(basket_id).await?;
 
@@ -603,6 +627,8 @@ impl Orders {
             coupon_code: None,
             discount_amount: None,
             charged_total: None,
+            contact_email,
+            contact_name,
         };
 
         self.insert(&order).await
@@ -632,6 +658,8 @@ impl Orders {
             coupon_code: updated_order.coupon_code,
             discount_amount: updated_order.discount_amount,
             charged_total: updated_order.charged_total,
+            contact_email: updated_order.contact_email,
+            contact_name: updated_order.contact_name,
         })
     }
 }
