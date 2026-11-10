@@ -7,7 +7,8 @@ use stec_tenet::encryption_modes::EncryptionModes;
 use uuid::Uuid;
 use chrono::{NaiveDateTime, Utc};
 use crate::error::ShopsterError;
-use crate::postgresql::dbcustomer::{DbCustomer, DbCustomerMessage, DbProfileMessage};
+use crate::postgresql::dbcustomer::{DbCustomer, DbCustomerMessage, DbProfileMessage, dummy_verify, hash_password_argon2id};
+use log::warn;
 
 
 /// A customer in the shop system.
@@ -152,12 +153,35 @@ impl Customers {
     }
 
     pub async fn verify_email_password(&self, email: String, password: &str) -> Result<Customer, ShopsterError> {
-        let db_customer = DbCustomer::find_by_email(self.tenant_id, email).await?;
+        let db_customer = match DbCustomer::find_by_email(self.tenant_id, email).await {
+            Ok(customer) => customer,
+            Err(ShopsterError::DatabaseError(diesel::result::Error::NotFound)) => {
+                // Unknown e-mail: do the same expensive work and return the same error as
+                // for a wrong password, so neither the response nor its timing reveals
+                // whether an account exists.
+                dummy_verify(password);
+                return Err(ShopsterError::AuthenticationError("Ungültiges Passwort".to_string()));
+            }
+            Err(e) => return Err(e),
+        };
 
         let is_valid = db_customer.verify_password(password)?;
 
         if !is_valid {
             return Err(ShopsterError::AuthenticationError("Ungültiges Passwort".to_string()));
+        }
+
+        // Transparently upgrade hashes made with an older/weaker policy. A failure here
+        // must not fail an otherwise successful login.
+        if db_customer.password_needs_rehash() {
+            match hash_password_argon2id(password) {
+                Ok(new_hash) => {
+                    if let Err(e) = DbCustomer::update_password(self.tenant_id, db_customer.id, &new_hash, &db_customer.algorithm).await {
+                        warn!("Could not store upgraded password hash for customer {}: {:?}", db_customer.id, e);
+                    }
+                }
+                Err(e) => warn!("Could not rehash password for customer {}: {:?}", db_customer.id, e),
+            }
         }
 
         let customer = Customer::try_from(&db_customer)?;

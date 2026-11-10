@@ -197,6 +197,8 @@ The `error.rs` module documents all possible errors:
 - `PasswordHashingError` - Password hashing failed
 - `InvalidOperationError` - Invalid state or parameters
 - `AuthenticationError` - Authentication failure
+- `DatabaseMigrationError` - A tenant database migration failed (tenant initialisation is retried on next access)
+- `NotInitialized` - A handler was used before `Shopster::new` registered a `DatabaseSelector`
 
 ## Architecture Diagrams
 

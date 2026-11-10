@@ -832,3 +832,108 @@ async fn tenant_isolation_test() {
         customers2.remove(tenant2_customers[0].id).await.unwrap();
     }).await;
 }
+
+
+#[tokio::test]
+async fn unknown_email_and_wrong_password_are_indistinguishable() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("auth_indistinguishable_test".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let shopster = Shopster::new(DatabaseSelector::new(tenet));
+        let customers = shopster.customers(tenant.id).unwrap();
+
+        customers.insert(&Customer {
+            id: Default::default(),
+            email: "known@example.com".to_string(),
+            email_verified: true,
+            encryption_mode: EncryptionModes::Argon2,
+            password: "CorrectPassword1".to_string(),
+            full_name: "Known".to_string(),
+            created_at: Default::default(),
+            updated_at: None,
+        }).await.unwrap();
+
+        let wrong_password = customers.verify_email_password("known@example.com".to_string(), "nope").await.err().unwrap();
+        let unknown_email = customers.verify_email_password("unknown@example.com".to_string(), "nope").await.err().unwrap();
+
+        assert!(matches!(wrong_password, stec_shopster::error::ShopsterError::AuthenticationError(_)));
+        assert!(matches!(unknown_email, stec_shopster::error::ShopsterError::AuthenticationError(_)));
+        assert_eq!(format!("{:?}", wrong_password), format!("{:?}", unknown_email));
+    }).await;
+}
+
+#[tokio::test]
+async fn new_passwords_are_hashed_with_argon2id() {
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("argon2id_test".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string, tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let shopster = Shopster::new(DatabaseSelector::new(tenet));
+        let customers = shopster.customers(tenant.id).unwrap();
+
+        let created = customers.insert(&Customer {
+            id: Default::default(),
+            email: "argon2id@example.com".to_string(),
+            email_verified: true,
+            encryption_mode: EncryptionModes::Argon2,
+            password: "SomePassword123".to_string(),
+            full_name: "Argon".to_string(),
+            created_at: Default::default(),
+            updated_at: None,
+        }).await.unwrap();
+
+        assert!(created.password.starts_with("$argon2id$v=19$m=19456,t=2,p=1$"), "{}", created.password);
+    }).await;
+}
+
+#[tokio::test]
+async fn legacy_argon2i_hash_is_upgraded_on_successful_login() {
+    use diesel::prelude::*;
+    use diesel::sql_query;
+    use diesel::sql_types::{Text, Uuid as SqlUuid};
+
+    test_harness(|tenet_connection_string, shopster_connection_string| async move {
+        let tenet = Tenet::new(tenet_connection_string);
+        let tenant = tenet.create_tenant("argon2_rehash_test".to_string()).unwrap();
+        let storage = Storage::new_postgresql_database(shopster_connection_string.clone(), tenant.id);
+        tenant.add_storage(&storage).unwrap();
+
+        let shopster = Shopster::new(DatabaseSelector::new(tenet));
+        let customers = shopster.customers(tenant.id).unwrap();
+
+        let created = customers.insert(&Customer {
+            id: Default::default(),
+            email: "rehash@example.com".to_string(),
+            email_verified: true,
+            encryption_mode: EncryptionModes::Argon2,
+            password: "LegacyPassword1".to_string(),
+            full_name: "Legacy".to_string(),
+            created_at: Default::default(),
+            updated_at: None,
+        }).await.unwrap();
+
+        // Replace the hash with one made by the previous implementation (Config::original()).
+        let legacy_hash = argon2::hash_encoded(b"LegacyPassword1", &[9u8; 32], &argon2::Config::original()).unwrap();
+        assert!(legacy_hash.starts_with("$argon2i$"));
+        let mut conn = PgConnection::establish(&shopster_connection_string).unwrap();
+        sql_query("UPDATE customers SET password = $1 WHERE id = $2")
+            .bind::<Text, _>(&legacy_hash)
+            .bind::<SqlUuid, _>(created.id)
+            .execute(&mut conn)
+            .unwrap();
+
+        // The legacy hash still logs in...
+        customers.verify_email_password("rehash@example.com".to_string(), "LegacyPassword1").await.unwrap();
+
+        // ...and has been replaced by an Argon2id hash that also verifies.
+        let upgraded = customers.get(created.id).await.unwrap().password;
+        assert!(upgraded.starts_with("$argon2id$"), "{upgraded}");
+        customers.verify_email_password("rehash@example.com".to_string(), "LegacyPassword1").await.unwrap();
+        assert!(customers.verify_email_password("rehash@example.com".to_string(), "wrong").await.is_err());
+    }).await;
+}

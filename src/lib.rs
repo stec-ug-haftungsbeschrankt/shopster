@@ -51,6 +51,7 @@ pub mod coupons;
 pub mod customers;
 pub mod products;
 pub mod orders;
+pub mod secrets;
 pub mod payment_attempts;
 pub mod settings;
 pub mod warehouse;
@@ -70,9 +71,10 @@ use diesel_async::pooled_connection::bb8::Pool;
 use diesel_migrations::EmbeddedMigrations;
 
 use error::ShopsterError;
+use secrets::SecretKey;
 use log::warn;
 use crate::diesel_migrations::MigrationHarness;
-use crate::postgresql::DatabaseHelper;
+use crate::postgresql::{DatabaseHelper, redact_connection_string};
 use log::info;
 use std::collections::HashMap;
 use std::sync::{Arc, OnceLock};
@@ -94,8 +96,6 @@ pub(crate) type DbPool = Pool<AsyncPgConnection>;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!();
 
-const DATABASE_ACQUISITION_ERROR: &str = "Unable to acquire Database";
-
 /// A connection pool that is created at most once, even under concurrent access.
 type PoolCell = Arc<OnceCell<DbPool>>;
 
@@ -112,7 +112,8 @@ type PoolCell = Arc<OnceCell<DbPool>>;
 #[derive(Debug)]
 pub struct DatabaseSelector {
     tenants: Tenet,
-    database_cache: Mutex<HashMap<Uuid, PoolCell>>
+    database_cache: Mutex<HashMap<Uuid, PoolCell>>,
+    secret_key: Option<SecretKey>,
 }
 
 impl DatabaseSelector {
@@ -120,8 +121,16 @@ impl DatabaseSelector {
     pub fn new(tenet: Tenet) -> Self {
         DatabaseSelector {
             tenants: tenet,
-            database_cache: Mutex::new(HashMap::new())
+            database_cache: Mutex::new(HashMap::new()),
+            secret_key: None,
         }
+    }
+
+    /// Sets the key used to encrypt secret settings (see [`secrets`]). Without a key,
+    /// `Settings::get_secret` / `set_secret` return an error instead of storing plaintext.
+    pub fn with_secret_key(mut self, key: SecretKey) -> Self {
+        self.secret_key = Some(key);
+        self
     }
 
     /// Registers and initializes the default database.
@@ -178,22 +187,29 @@ impl DatabaseSelector {
                 None => return Err(ShopsterError::TenantStorageNotFound)
             };
 
-            info!("Database connection string: {}", connection_string);
+            info!("Tenant database: {}", redact_connection_string(&connection_string));
 
-            if !DatabaseHelper::is_database_exists(&connection_string) {
-                info!("Database does not exit, creating it...");
+            if !DatabaseHelper::is_database_exists(&connection_string)? {
+                info!("Database does not exist, creating it...");
                 if let Err(e) = DatabaseHelper::create_database(&connection_string) {
-                    warn!("{:?}", e);
+                    // Another instance may have created it in the meantime; anything
+                    // else (permissions, bad URL, ...) is a hard failure.
+                    if !DatabaseHelper::is_database_exists(&connection_string).unwrap_or(false) {
+                        return Err(e);
+                    }
+                    warn!("Database was created concurrently: {:?}", e);
                 }
             }
 
             {
                 let mut sync_conn = PgConnection::establish(&connection_string)
                     .map_err(|e| ShopsterError::DatabaseConnectionError(e.to_string()))?;
-                match sync_conn.run_pending_migrations(MIGRATIONS) {
-                    Ok(_) => info!("Shopster Database migrations successfully executed."),
-                    Err(e) => warn!("Migrations failed: {:?}", e)
-                }
+                // A failed migration must not produce a cached pool for a half-migrated
+                // schema. Returning the error leaves the cell uninitialised, so the next
+                // call retries from scratch.
+                sync_conn.run_pending_migrations(MIGRATIONS)
+                    .map_err(|e| ShopsterError::DatabaseMigrationError(e.to_string()))?;
+                info!("Shopster Database migrations successfully executed.");
             }
 
             let manager = AsyncDieselConnectionManager::<AsyncPgConnection>::new(&connection_string);
@@ -212,11 +228,22 @@ static DATABASE_SELECTOR: OnceLock<DatabaseSelector> = OnceLock::new();
 /// Acquires a connection pool for the given tenant from the global selector.
 pub(crate) async fn aquire_pool(tenant_id: Uuid) -> Result<DbPool, ShopsterError> {
     DATABASE_SELECTOR.get()
-        .expect(DATABASE_ACQUISITION_ERROR)
+        .ok_or(ShopsterError::NotInitialized)?
         .get_storage_for_tenant(tenant_id)
         .await
 }
 
+
+/// Returns the configured secret-settings key.
+pub(crate) fn secret_key() -> Result<&'static SecretKey, ShopsterError> {
+    DATABASE_SELECTOR.get()
+        .ok_or(ShopsterError::NotInitialized)?
+        .secret_key
+        .as_ref()
+        .ok_or_else(|| ShopsterError::InvalidOperationError(
+            "No secret key configured: call DatabaseSelector::with_secret_key".to_string()
+        ))
+}
 
 /// The main entry point for accessing Shopster functionality.
 ///
@@ -235,8 +262,8 @@ pub struct Shopster { }
 impl Shopster {
     /// Creates a new `Shopster` instance and initializes the global database selector.
     pub fn new(database_selector: DatabaseSelector) -> Self {
-        if let Err(e) = DATABASE_SELECTOR.set(database_selector) {
-            warn!("{:?}", e);
+        if DATABASE_SELECTOR.set(database_selector).is_err() {
+            warn!("Shopster::new called more than once: the DatabaseSelector registered first stays in use");
         }
         Shopster { }
     }

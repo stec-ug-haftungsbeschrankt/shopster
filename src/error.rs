@@ -53,6 +53,11 @@ pub enum ShopsterError {
     #[error("Database Migration Error: {0}")]
     DatabaseMigrationError(String),
 
+    /// A domain handler was used before [`Shopster::new`](crate::Shopster::new) registered a
+    /// `DatabaseSelector`.
+    #[error("Shopster has not been initialised: call Shopster::new first")]
+    NotInitialized,
+
     /// An internal error occurred (e.g., mutex poisoned).
     #[error("Internal Error: {0}")]
     InternalError(String),

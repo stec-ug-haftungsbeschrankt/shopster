@@ -27,12 +27,9 @@ cd shopster
 cargo install cargo-nextest --locked
 cargo install cargo-llvm-cov
 
-# Create .env file for local development
-cat > .env << EOF
-DATABASE_URL=postgres://postgres:postgres@localhost/shopster_db
-TENET_DATABASE_URL=postgres://postgres:postgres@localhost/tenet_db
-RUST_LOG=info
-EOF
+# Create your local .env (it is git-ignored - never commit credentials)
+cp .env.example .env
+# then edit DATABASE_URL (and optionally TENET_DATABASE_URL / RUST_LOG)
 ```
 
 ## Development Workflow

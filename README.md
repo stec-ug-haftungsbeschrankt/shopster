@@ -244,6 +244,35 @@ TENET_DATABASE_URL=postgres://user:password@localhost/tenet_db
 RUST_LOG=info
 ```
 
+### Secrets and security
+
+- **Secret settings** (`stripe_secret_api_key`, `stripe_webhook_secret`, `sendgrid_api_key`) are
+  encrypted at rest with AES-256-GCM. Supply a 32-byte key from your own secret store when you
+  build the selector; the key is never written to the tenant database:
+
+  ```rust
+  use stec_shopster::secrets::SecretKey;
+
+  let key = SecretKey::from_hex(&std::env::var("SHOPSTER_SECRET_KEY")?)?; // openssl rand -hex 32
+  let selector = DatabaseSelector::new(tenet).with_secret_key(key);
+  let shopster = Shopster::new(selector);
+
+  shopster.settings(tenant_id)?.set_secret("stripe_webhook_secret", "whsec_...").await?;
+  let secret = shopster.settings(tenant_id)?.get_secret("stripe_webhook_secret").await?;
+  ```
+
+  Secrets are not returned by `Settings::get_all`, and `Setting::value` is empty for them. When
+  upgrading, run `Settings::encrypt_legacy_secrets()` once per tenant to encrypt values that were
+  stored in plaintext before.
+- **Passwords** are hashed with Argon2id (19 MiB, 2 passes, 1 lane). Hashes created by older
+  versions (Argon2i) keep working and are upgraded transparently on the next successful login.
+  Unknown e-mail and wrong password produce the same `AuthenticationError`.
+- **Tenant databases**: a failed `CREATE DATABASE` or migration makes `get_storage_for_tenant`
+  return an error (and is retried on the next call) instead of silently running on a broken
+  schema. Database names must consist of letters, digits, `_` and `-` (max. 63 characters).
+  Connection strings are redacted in logs.
+- Never commit `.env`; copy `.env.example` instead.
+
 ## Database Setup
 
 Run migrations using Diesel CLI:

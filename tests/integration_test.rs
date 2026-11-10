@@ -53,7 +53,7 @@ async fn settings_get_all() {
         let settings = shopster.settings(tenant.id).unwrap().get_all().await;
 
         assert!(settings.is_ok());
-        assert_eq!(14, settings.unwrap().len());
+        assert_eq!(11, settings.unwrap().len());
     }).await;
 }
 
